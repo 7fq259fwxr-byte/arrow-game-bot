@@ -1,3 +1,5 @@
+# Updated bot10.py
+
 import os
 import json
 from flask import Flask, request, jsonify
@@ -70,7 +72,9 @@ def telegram_webhook():
                         # Пользователь не подписан
                         keyboard = {
                             "inline_keyboard": [[
-                                {"text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
+                                {
+                                    "text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"
+                                },
                                 {"text": "✅ Проверить", "callback_data": "check_sub"}
                             ]]
                         }
@@ -243,7 +247,7 @@ def telegram_webhook():
         print(f"Ошибка в вебхуке: {str(e)}")  # Для логов PythonAnywhere
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# ========== API ДЛЯ ИГРЫ (старое) ==========
+# ========== API ДЛЯ ИГРЫ ==========
 @app.route('/api/get_user', methods=['POST'])
 def get_user():
     try:
@@ -267,6 +271,30 @@ def get_user():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/update_score', methods=['POST'])
+def update_score():
+    try:
+        data = request.get_json()
+        user_id = str(data.get('user_id'))
+        username = data.get('username')
+        new_level = data.get('level')
+        coins_earned = data.get('coins_earned', 0)
+        
+        users = load_data()
+        if user_id in users:
+            user = users[user_id]
+            user['level'] = max(user.get('level', 1), new_level)
+            user['coins'] = user.get('coins', 0) + coins_earned
+            user['score'] = user['level'] - 1  # Levels passed
+            if username:
+                user['username'] = username
+            save_data(users)
+            return jsonify({"success": True, "coins": user['coins']})
+        else:
+            return jsonify({"success": False, "error": "User not found"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/test', methods=['GET'])
 def test_api():
     return jsonify({
@@ -278,8 +306,12 @@ def test_api():
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
     users = load_data()
-    sorted_users = sorted(users.values(), key=lambda x: x.get('score', 0), reverse=True)[:10]
-    return jsonify(sorted_users)
+    sorted_users = sorted(
+        [{"user_id": int(k), **v} for k, v in users.items()],
+        key=lambda x: x.get('score', 0),
+        reverse=True
+    )[:10]
+    return jsonify({"success": True, "leaderboard": sorted_users})
 
 # ========== НАСТРОЙКА ВЕБХУКА ==========
 @app.route('/set_webhook', methods=['GET'])
