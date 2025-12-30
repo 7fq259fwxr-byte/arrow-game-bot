@@ -1,5 +1,3 @@
-# Updated bot10.py
-
 import os
 import json
 from flask import Flask, request, jsonify
@@ -17,7 +15,51 @@ GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
 # ========== БАЗОВЫЕ ФУНКЦИИ ==========
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return {}
+        # Создаем тестовых пользователей для демонстрации
+        test_data = {
+            "123456": {
+                "username": "Игрок_Алексей",
+                "score": 25,
+                "games_played": 30,
+                "coins": 150,
+                "level": 26
+            },
+            "654321": {
+                "username": "Профи_Мария",
+                "score": 42,
+                "games_played": 50,
+                "coins": 300,
+                "level": 43
+            },
+            "111111": {
+                "username": "Новичок_Иван",
+                "score": 5,
+                "games_played": 8,
+                "coins": 40,
+                "level": 6
+            },
+            "222222": {
+                "username": "Чемпион_Ольга",
+                "score": 68,
+                "games_played": 75,
+                "coins": 500,
+                "level": 69
+            },
+            "333333": {
+                "username": "Эксперт_Дмитрий",
+                "score": 35,
+                "games_played": 40,
+                "coins": 220,
+                "level": 36
+            }
+        }
+        
+        # Сохраняем тестовые данные
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(test_data, f, ensure_ascii=False, indent=2)
+        
+        return test_data
+    
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -305,13 +347,38 @@ def test_api():
 
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
-    users = load_data()
-    sorted_users = sorted(
-        [{"user_id": int(k), **v} for k, v in users.items()],
-        key=lambda x: x.get('score', 0),
-        reverse=True
-    )[:10]
-    return jsonify({"success": True, "leaderboard": sorted_users})
+    try:
+        users = load_data()
+        
+        # Создаем список пользователей для лидерборда
+        leaderboard_data = []
+        for user_id_str, user_data in users.items():
+            leaderboard_data.append({
+                "user_id": int(user_id_str) if user_id_str.isdigit() else user_id_str,
+                "username": user_data.get("username", f"Player{user_id_str}"),
+                "score": user_data.get("score", 0),
+                "level": user_data.get("level", 1),
+                "coins": user_data.get("coins", 0)
+            })
+        
+        # Сортируем по score (пройденные уровни)
+        sorted_users = sorted(
+            leaderboard_data,
+            key=lambda x: x.get('score', 0),
+            reverse=True
+        )[:10]  # Только топ-10
+        
+        return jsonify({
+            "success": True, 
+            "leaderboard": sorted_users
+        })
+        
+    except Exception as e:
+        print(f"Ошибка в лидерборде: {str(e)}")
+        return jsonify({
+            "success": False, 
+            "error": str(e)
+        }), 500
 
 # ========== НАСТРОЙКА ВЕБХУКА ==========
 @app.route('/set_webhook', methods=['GET'])
