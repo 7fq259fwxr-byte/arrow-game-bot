@@ -1,444 +1,545 @@
-#!/usr/bin/env python3
-import requests
-import json
-import time
-import logging
-from flask import Flask, request, jsonify
-import threading
 import os
+import json
+import logging
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.constants import ChatMemberStatus
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from datetime import datetime
 
-app = Flask(__name__)
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Конфигурация
 BOT_TOKEN = "8124600551:AAHYE9GXQHmc3bAe1kABfqHBmmOKqQQliWU"
-GAME_URL = "https://ваш-сайт.github.io/arrows-game/"  # Замените на ваш
+DATA_FILE = "/home/malollas/arrows_data.json"
+CHANNEL_ID = "@arrows_game"  # Канал для обязательной подписки
+GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
+SUPPORT_BOT = "@arrow_game_supprot_bot"
 
-# База данных
-DATA_FILE = "users_data.json"
-
+# Вспомогательные функции для базы данных
 def load_data():
-    if os.path.exists(DATA_FILE):
+    if not os.path.exists(DATA_FILE):
+        return {}
+    try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return {"users": {}, "leaderboard": [], "shop_items": initialize_shop()}
+    except Exception as e:
+        logger.error(f"Error loading data: {e}")
+        return {}
 
 def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def initialize_shop():
-    return {
-        "arrow_skins": [
-            {"id": "default", "name": "Classic", "price": 0},
-            {"id": "fire", "name": "Fire", "price": 100},
-            {"id": "ice", "name": "Ice", "price": 150},
-            {"id": "gold", "name": "Golden", "price": 300},
-            {"id": "neon", "name": "Neon", "price": 200},
-            {"id": "rainbow", "name": "Rainbow", "price": 500}
-        ],
-        "board_themes": [
-            {"id": "default", "name": "Classic", "price": 0},
-            {"id": "wood", "name": "Wood", "price": 200},
-            {"id": "space", "name": "Space", "price": 300},
-            {"id": "marble", "name": "Marble", "price": 250},
-            {"id": "night", "name": "Night", "price": 180},
-            {"id": "ocean", "name": "Ocean", "price": 220}
-        ],
-        "effects": [
-            {"id": "none", "name": "No Effects", "price": 0},
-            {"id": "sparkles", "name": "Sparkles", "price": 150},
-            {"id": "confetti", "name": "Confetti", "price": 200},
-            {"id": "fireworks", "name": "Fireworks", "price": 300},
-            {"id": "glow", "name": "Glow", "price": 100},
-            {"id": "trail", "name": "Trail", "price": 120}
-        ]
-    }
-
-# API для игры
-@app.route('/api/get_user_data', methods=['POST'])
-def get_user_data():
-    """Получение данных пользователя для игры"""
-    data = request.json
-    user_id = data.get('user_id')
-    
-    db = load_data()
-    
-    if str(user_id) in db["users"]:
-        user_data = db["users"][str(user_id)]
-        return jsonify({
-            "success": True,
-            "coins": user_data.get("coins", 0),
-            "max_level": user_data.get("max_level", 1),
-            "username": user_data.get("username", "Player"),
-            "skins": user_data.get("skins", ["default"]),
-            "selected_skin": user_data.get("selected_skin", "default"),
-            "shop_items": db["shop_items"]
-        })
-    
-    return jsonify({"success": False, "error": "User not found"})
-
-@app.route('/api/update_score', methods=['POST'])
-def update_score():
-    """Обновление счета пользователя"""
-    data = request.json
-    user_id = data.get('user_id')
-    username = data.get('username')
-    new_level = data.get('level')
-    coins_earned = data.get('coins_earned', 0)
-    
-    db = load_data()
-    user_id_str = str(user_id)
-    
-    if user_id_str not in db["users"]:
-        db["users"][user_id_str] = {
-            "username": username,
-            "coins": 0,
-            "max_level": 1,
-            "skins": ["default"],
-            "selected_skin": "default",
-            "purchases": [],
-            "created_at": time.time()
-        }
-    
-    user = db["users"][user_id_str]
-    user["coins"] = user.get("coins", 0) + coins_earned
-    
-    if new_level > user.get("max_level", 1):
-        user["max_level"] = new_level
-    
-    # Обновляем лидерборд
-    update_leaderboard(db, user_id_str, username, user["max_level"])
-    
-    save_data(db)
-    
-    return jsonify({"success": True, "coins": user["coins"]})
-
-@app.route('/api/purchase_item', methods=['POST'])
-def purchase_item():
-    """Покупка предмета в магазине"""
-    data = request.json
-    user_id = data.get('user_id')
-    item_id = data.get('item_id')
-    item_type = data.get('item_type')  # arrow, board, effect
-    
-    db = load_data()
-    user_id_str = str(user_id)
-    
-    if user_id_str not in db["users"]:
-        return jsonify({"success": False, "error": "User not found"})
-    
-    user = db["users"][user_id_str]
-    
-    # Находим предмет в магазине
-    shop_items = db["shop_items"]
-    item = None
-    if item_type == "arrow":
-        item = next((i for i in shop_items["arrow_skins"] if i["id"] == item_id), None)
-    elif item_type == "board":
-        item = next((i for i in shop_items["board_themes"] if i["id"] == item_id), None)
-    elif item_type == "effect":
-        item = next((i for i in shop_items["effects"] if i["id"] == item_id), None)
-    
-    if not item:
-        return jsonify({"success": False, "error": "Item not found"})
-    
-    # Проверяем, не куплен ли уже предмет
-    if item_id in user.get("skins", []):
-        return jsonify({"success": False, "error": "Already purchased"})
-    
-    # Проверяем достаточно ли монет
-    if user["coins"] < item["price"]:
-        return jsonify({"success": False, "error": "Not enough coins"})
-    
-    # Совершаем покупку
-    user["coins"] -= item["price"]
-    if "skins" not in user:
-        user["skins"] = []
-    user["skins"].append(item_id)
-    
-    if "purchases" not in user:
-        user["purchases"] = []
-    user["purchases"].append({
-        "item_id": item_id,
-        "item_type": item_type,
-        "price": item["price"],
-        "timestamp": time.time()
-    })
-    
-    save_data(db)
-    
-    return jsonify({
-        "success": True, 
-        "coins": user["coins"],
-        "skins": user["skins"]
-    })
-
-@app.route('/api/select_item', methods=['POST'])
-def select_item():
-    """Выбор активного предмета"""
-    data = request.json
-    user_id = data.get('user_id')
-    item_id = data.get('item_id')
-    item_type = data.get('item_type')
-    
-    db = load_data()
-    user_id_str = str(user_id)
-    
-    if user_id_str not in db["users"]:
-        return jsonify({"success": False, "error": "User not found"})
-    
-    user = db["users"][user_id_str]
-    
-    # Проверяем, есть ли предмет у пользователя
-    if item_id not in user.get("skins", []):
-        return jsonify({"success": False, "error": "Item not owned"})
-    
-    # Выбираем предмет
-    if item_type == "arrow":
-        user["selected_skin"] = item_id
-    # Для других типов можно добавить аналогично
-    
-    save_data(db)
-    
-    return jsonify({"success": True})
-
-@app.route('/api/leaderboard', methods=['GET'])
-def get_leaderboard():
-    """Получение таблицы лидеров"""
-    db = load_data()
-    
-    # Создаем список для лидерборда
-    leaderboard = []
-    for user_id, user_data in db["users"].items():
-        leaderboard.append({
-            "user_id": user_id,
-            "username": user_data["username"],
-            "score": user_data["max_level"],
-            "coins": user_data["coins"]
-        })
-    
-    # Сортируем по уровню
-    leaderboard.sort(key=lambda x: x["score"], reverse=True)
-    
-    return jsonify({"success": True, "leaderboard": leaderboard[:20]})
-
-def update_leaderboard(db, user_id, username, score):
-    """Обновление лидерборда"""
-    # Ищем пользователя в лидерборде
-    found = False
-    for entry in db["leaderboard"]:
-        if entry["user_id"] == user_id:
-            if score > entry["score"]:
-                entry["score"] = score
-                entry["username"] = username
-                entry["updated_at"] = time.time()
-            found = True
-            break
-    
-    if not found:
-        db["leaderboard"].append({
-            "user_id": user_id,
-            "username": username,
-            "score": score,
-            "updated_at": time.time()
-        })
-    
-    # Сортируем лидерборд
-    db["leaderboard"].sort(key=lambda x: x["score"], reverse=True)
-    # Оставляем только топ-50
-    db["leaderboard"] = db["leaderboard"][:50]
-
-# Telegram бот
-def send_telegram_message(chat_id, text, keyboard=None):
-    """Отправка сообщения в Telegram"""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
-    
-    if keyboard:
-        payload["reply_markup"] = keyboard
-    
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        return response.json()
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
     except Exception as e:
-        print(f"Ошибка отправки: {e}")
-        return None
+        logger.error(f"Error saving data: {e}")
+        return False
 
+# Функция проверки подписки на канал
+async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Проверяет, подписан ли пользователь на канал."""
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        return member.status in [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.CREATOR
+        ]
+    except Exception as e:
+        logger.error(f"Ошибка при проверке подписки для {user_id}: {e}")
+        return False
+
+# Функция получения статистики пользователя
 def get_user_stats(user_id):
-    """Получение статистики пользователя"""
-    db = load_data()
+    users = load_data()
     user_id_str = str(user_id)
     
-    if user_id_str in db["users"]:
-        user = db["users"][user_id_str]
-        
-        # Определяем позицию в лидерборде
-        position = 1
-        for entry in db["leaderboard"]:
-            if entry["user_id"] == user_id_str:
-                break
-            position += 1
-        
-        return f"""
-📊 *ВАША СТАТИСТИКА:*
+    if user_id_str in users:
+        user_data = users[user_id_str]
+        return {
+            "username": user_data.get("username", "Гость"),
+            "score": user_data.get("score", 0),
+            "games_played": user_data.get("games_played", 0),
+            "coins": user_data.get("coins", 0),
+            "level": user_data.get("level", 1),
+            "last_active": user_data.get("last_active", "Никогда")
+        }
+    return None
 
-🏆 *Уровень:* {user['max_level']}
-💰 *Монеты:* {user['coins']} 🪙
-🥇 *Место в рейтинге:* #{position}
-🎨 *Скинов:* {len(user.get('skins', ['default']))}
-
-*Продолжайте в том же духе!* 🚀
-        """
+# Функция получения лидерборда
+def get_leaderboard(limit=10):
+    users = load_data()
+    sorted_users = sorted(
+        users.values(), 
+        key=lambda x: x.get('score', 0), 
+        reverse=True
+    )[:limit]
     
-    return "Вы еще не играли. Начните сейчас! 🎮"
+    leaderboard = []
+    for i, user in enumerate(sorted_users, 1):
+        leaderboard.append({
+            "rank": i,
+            "username": user.get("username", "Гость"),
+            "score": user.get("score", 0),
+            "level": user.get("level", 1),
+            "coins": user.get("coins", 0)
+        })
+    return leaderboard
 
-def handle_telegram_update(update):
-    """Обработка обновлений Telegram"""
-    if "message" in update:
-        message = update["message"]
-        chat_id = message["chat"]["id"]
-        text = message.get("text", "")
-        user = message["from"]
-        
-        # Сохраняем пользователя
-        db = load_data()
-        user_id_str = str(user["id"])
-        
-        if user_id_str not in db["users"]:
-            username = user.get("username", f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-            if not username:
-                username = f"Player{user_id_str[-4:]}"
-            db["users"][user_id_str] = {
-                "username": username,
-                "coins": 0,
-                "max_level": 1,
-                "skins": ["default"],
-                "selected_skin": "default",
-                "created_at": time.time()
-            }
-            save_data(db)
-        
-        if text == "/start":
-            keyboard = {
-                "inline_keyboard": [[
-                    {"text": "🎮 НАЧАТЬ ИГРУ", "web_app": {"url": GAME_URL}}
-                ]]
-            }
-            
-            welcome_text = f"""
-Привет, {user.get('first_name', 'Игрок')}! 👋
+# Функция сохранения/обновления пользователя
+def save_user_data(user_id, username):
+    users = load_data()
+    user_id_str = str(user_id)
+    
+    if user_id_str not in users:
+        users[user_id_str] = {
+            "username": username,
+            "score": 0,
+            "games_played": 0,
+            "coins": 0,
+            "level": 1,
+            "last_active": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "first_seen": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    else:
+        users[user_id_str]["last_active"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        users[user_id_str]["username"] = username
+    
+    save_data(users)
+    return users[user_id_str]
 
-🎮 *Arrows Pro Ultra* - новая версия с:
-• Системой монет и наград
-• Реальной таблицей лидеров
-• Магазином скинов
-• Прогрессом между уровнями
+# Главное меню
+def get_main_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("🎮 Играть", web_app=WebAppInfo(url=GAME_URL))],
+        [
+            InlineKeyboardButton("📊 Статистика", callback_data='stats'),
+            InlineKeyboardButton("🏆 Лидерборд", callback_data='leaderboard')
+        ],
+        [
+            InlineKeyboardButton("❓ Об игре", callback_data='about'),
+            InlineKeyboardButton("🛠 Поддержка", callback_data='support')
+        ],
+        [InlineKeyboardButton("💡 Предложить идею", callback_data='suggestion')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
-*Начните играть и зарабатывайте монеты!* 🪙
+# Клавиатура для проверки подписки
+def get_subscription_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Подписаться на канал", url=f"https://t.me/{CHANNEL_ID.lstrip('@')}"),
+            InlineKeyboardButton("✅ Я подписался", callback_data='check_subscription')
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
-🏆 *Ваш прогресс сохраняется автоматически*
-            """
-            
-            send_telegram_message(chat_id, welcome_text, keyboard)
+# Кнопка "Назад"
+def get_back_button():
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data='back')]]
+    return InlineKeyboardMarkup(keyboard)
+
+# Команда /start с проверкой подписки
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+    username = user.username or user.first_name or "Гость"
+    
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user_id, context)
+    
+    if not is_subscribed:
+        # Показываем сообщение с требованием подписки
+        await update.message.reply_text(
+            "⚠️ *ДОСТУП ЗАКРЫТ*\n\n"
+            "Для использования бота необходима подписка на наш канал!\n\n"
+            "📢 *Arrows Game Channel*: @arrows_game\n\n"
+            "1. Нажмите кнопку '📢 Подписаться на канал' ниже\n"
+            "2. После вступления нажмите '✅ Я подписался'\n"
+            "3. Если бот не видит подписку, подождите 10 секунд и попробуйте снова",
+            reply_markup=get_subscription_keyboard(),
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Сохраняем пользователя
+    save_user_data(user_id, username)
+    
+    # Показываем главное меню
+    welcome_text = f"""🎮 *Добро пожаловать в Arrows Pro Ultra, {username}!* 🎮
+
+*Доступ открыт!* ✅ Вы подписаны на канал @arrows_game
+
+*Выберите действие:*"""
+    
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode='Markdown'
+    )
+
+# Функция показа главного меню (для callback)
+async def show_main_menu(query):
+    user = query.from_user
+    username = user.username or user.first_name or "Гость"
+    
+    welcome_text = f"""🎮 *Главное меню Arrows Pro Ultra* 🎮
+
+*Игрок:* {username}
+*Статус:* ✅ Подписка активна
+
+*Выберите действие:*"""
+    
+    await query.edit_message_text(
+        welcome_text,
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode='Markdown'
+    )
+
+# Обработчик нажатий на кнопки
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    # Проверяем подписку для всех действий, кроме проверки подписки и "назад"
+    if query.data not in ['check_subscription', 'back']:
+        is_subscribed = await check_subscription(user_id, context)
+        if not is_subscribed:
+            await query.edit_message_text(
+                "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                "Ваша подписка на канал @arrows_game не активна!\n\n"
+                "Обновите подписку и нажмите кнопку ниже:",
+                reply_markup=get_subscription_keyboard(),
+                parse_mode='Markdown'
+            )
+            return
+    
+    # Обработка действий
+    if query.data == 'stats':
+        stats = get_user_stats(user_id)
+        if stats:
+            stats_text = f"""📊 *ВАША СТАТИСТИКА*
+
+👤 *Игрок:* {stats['username']}
+🏆 *Уровень:* {stats['level']}
+⭐ *Очки:* {stats['score']}
+💰 *Монеты:* {stats['coins']}
+🎮 *Игр сыграно:* {stats['games_played']}
+🕐 *Последняя активность:* {stats['last_active']}"""
+        else:
+            stats_text = "Вы еще не начали играть! Нажмите '🎮 Играть', чтобы начать."
         
-        elif text == "/stats":
-            stats_text = get_user_stats(user["id"])
-            keyboard = {
-                "inline_keyboard": [[
-                    {"text": "🎮 ПРОДОЛЖИТЬ ИГРУ", "web_app": {"url": GAME_URL}}
-                ]]
-            }
-            send_telegram_message(chat_id, stats_text, keyboard)
+        await query.edit_message_text(
+            stats_text,
+            parse_mode='Markdown',
+            reply_markup=get_back_button()
+        )
+    
+    elif query.data == 'leaderboard':
+        leaderboard = get_leaderboard()
         
-        elif text == "/leaderboard":
-            db = load_data()
-            
-            if not db["leaderboard"]:
-                send_telegram_message(chat_id, "Таблица лидеров пока пуста. Будьте первым! 🏆")
-                return
-            
-            leader_text = "🏆 *ТОП-10 ИГРОКОВ:*\n\n"
-            for i, entry in enumerate(db["leaderboard"][:10], 1):
-                leader_text += f"{i}. {entry['username']} - Уровень {entry['score']}\n"
-            
-            # Получаем позицию пользователя
-            position = 1
-            user_found = False
-            for entry in db["leaderboard"]:
-                if entry["user_id"] == user_id_str:
-                    user_found = True
-                    break
-                position += 1
-            
-            if user_found:
-                leader_text += f"\nВаше место: #{position}"
+        leaderboard_text = "🏆 *ТОП-10 ИГРОКОВ*\n\n"
+        for player in leaderboard:
+            medal = ""
+            if player['rank'] == 1:
+                medal = "🥇"
+            elif player['rank'] == 2:
+                medal = "🥈"
+            elif player['rank'] == 3:
+                medal = "🥉"
             else:
-                leader_text += f"\nВаше место: >10"
+                medal = f"{player['rank']}."
             
-            keyboard = {
-                "inline_keyboard": [[
-                    {"text": "🎮 ИГРАТЬ", "web_app": {"url": GAME_URL}}
-                ]]
-            }
-            
-            send_telegram_message(chat_id, leader_text, keyboard)
+            leaderboard_text += f"{medal} *{player['username']}*\n   Уровень: {player['level']} | Очки: {player['score']} | Монеты: {player['coins']}\n\n"
+        
+        await query.edit_message_text(
+            leaderboard_text,
+            parse_mode='Markdown',
+            reply_markup=get_back_button()
+        )
+    
+    elif query.data == 'about':
+        about_text = f"""🎮 *ARROWS PRO ULTRA*
 
-def telegram_polling():
-    """Поллинг Telegram бота"""
-    offset = 0
-    
-    while True:
-        try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-            params = {"offset": offset, "timeout": 30}
-            
-            response = requests.get(url, params=params, timeout=35)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data.get("result"):
-                    for update in data["result"]:
-                        offset = update["update_id"] + 1
-                        handle_telegram_update(update)
-            
-            time.sleep(0.1)
-            
-        except Exception as e:
-            print(f"Ошибка polling: {e}")
-            time.sleep(5)
+*ОБ ИГРЕ:*
+Arrows Pro Ultra - увлекательная логическая игра, где нужно расставлять стрелки на поле так, чтобы они не сталкивались.
 
-# Запуск Flask и Telegram бота
-def run_flask():
-    app.run(host='0.0.0.0', port=8080, debug=False)
+*ОСНОВНЫЕ МЕХАНИКИ:*
+• 🎯 Расставляйте стрелки на игровом поле
+• 🚫 Избегайте столкновений стрелок
+• 📈 Проходите уровни и повышайте сложность
+• 💰 Зарабатывайте монеты за победы
+• 🏆 Соревнуйтесь с другими игроками
 
-if __name__ == "__main__":
-    print("="*60)
-    print("🤖 ARROWS PRO ULTRA - БОТ СО СТАТИСТИКОЙ")
-    print("="*60)
-    print("🎮 Игра: ", GAME_URL)
-    print("📊 API: http://localhost:8080/api/")
-    print("="*60)
+*ОСОБЕННОСТИ:*
+✅ Простой и понятный геймплей
+✅ Постепенно возрастающая сложность
+✅ Система достижений и монет
+✅ Таблица лидеров
+✅ Регулярные обновления
+
+*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game
+
+Для начала игры нажмите '🎮 Играть' в главном меню!"""
+        
+        await query.edit_message_text(
+            about_text,
+            parse_mode='Markdown',
+            reply_markup=get_back_button()
+        )
     
-    # Создаем файл данных если его нет
-    if not os.path.exists(DATA_FILE):
-        save_data({"users": {}, "leaderboard": [], "shop_items": initialize_shop()})
-        print("✅ Создан файл данных с магазином")
+    elif query.data == 'support':
+        support_text = f"""🛠 *ПОДДЕРЖКА*
+
+*Если у вас возникли проблемы с игрой или есть вопросы:*
+
+👨‍💻 *Техническая поддержка:* {SUPPORT_BOT}
+
+*Мы поможем с:*
+• 🐛 Техническими проблемами
+• ❓ Вопросами по геймплею
+• 🔧 Неполадками в игре
+• 📱 Проблемами с запуском
+• 📢 Вопросами по подписке на канал
+
+*Время ответа:* обычно в течение 24 часов
+
+*Не стесняйтесь обращаться, мы всегда рады помочь!* 😊"""
+        
+        await query.edit_message_text(
+            support_text,
+            parse_mode='Markdown',
+            reply_markup=get_back_button()
+        )
     
-    # Запускаем Flask в отдельном потоке
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
+    elif query.data == 'suggestion':
+        suggestion_text = f"""💡 *ПРЕДЛОЖИТЬ ИДЕЮ*
+
+*У вас есть идея, как улучшить игру? Мы будем рады её услышать!*
+
+📝 *Отправляйте свои предложения:* {SUPPORT_BOT}
+
+*Что можно предложить:*
+• 🎮 Новые механики геймплея
+• 🎨 Улучшения интерфейса
+• 📊 Дополнительные статистики
+• 🏆 Новые достижения
+• 🔧 Технические улучшения
+
+*Наши критерии:*
+✅ Идея должна быть оригинальной
+✅ Предложение должно быть детальным
+✅ Учитывайте баланс игры
+
+*Лучшие идеи будут реализованы в следующих обновлениях!*"""
+        
+        await query.edit_message_text(
+            suggestion_text,
+            parse_mode='Markdown',
+            reply_markup=get_back_button()
+        )
     
-    # Даем Flask время на запуск
-    time.sleep(2)
+    elif query.data == 'check_subscription':
+        # Проверяем подписку
+        is_subscribed = await check_subscription(user_id, context)
+        
+        if is_subscribed:
+            # Сохраняем пользователя
+            user = query.from_user
+            save_user_data(user.id, user.username or user.first_name or "Гость")
+            
+            await show_main_menu(query)
+        else:
+            # Подписка не обнаружена
+            await query.edit_message_text(
+                "❌ *ПОДПИСКА НЕ ОБНАРУЖЕНА!*\n\n"
+                "*Убедитесь, что вы:*\n"
+                "1. Действительно вступили в канал: @arrows_game\n"
+                "2. Нажали кнопку '✅ Я подписался' после вступления\n"
+                "3. Если только что подписались, подождите 10 секунд\n\n"
+                "*Если проблема persists:*\n"
+                "• Проверьте, не вышел ли вы случайно из канала\n"
+                "• Убедитесь, что канал публичный\n"
+                "• Попробуйте начать снова с /start",
+                reply_markup=get_subscription_keyboard(),
+                parse_mode='Markdown'
+            )
     
-    # Запускаем Telegram бота
-    print("🚀 Запуск Telegram бота...")
-    telegram_polling()
+    elif query.data == 'back':
+        await show_main_menu(query)
+
+# Команда /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user_id, context)
+    if not is_subscribed:
+        await update.message.reply_text(
+            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
+            "Для использования бота необходима подписка на канал @arrows_game\n\n"
+            "Подпишитесь и попробуйте снова с /start",
+            parse_mode='Markdown'
+        )
+        return
+    
+    help_text = f"""📚 *ДОСТУПНЫЕ КОМАНДЫ*
+
+/start - Запустить бота и показать главное меню
+/help - Показать это сообщение помощи
+/stats - Показать вашу статистику
+/leaderboard - Показать таблицу лидеров
+
+*ОСНОВНЫЕ ФУНКЦИИ:*
+• 🎮 Играть - Запустить игру в мини-приложении
+• 📊 Статистика - Посмотреть вашу статистику
+• 🏆 Лидерборд - Таблица лучших игроков
+• ❓ Об игре - Информация об игре
+• 🛠 Поддержка - Связь с техподдержкой
+• 💡 Предложить идею - Отправить предложение по улучшению
+
+*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game
+
+*По всем вопросам:* {SUPPORT_BOT}"""
+    
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# Команда /stats
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+    
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user_id, context)
+    if not is_subscribed:
+        await update.message.reply_text(
+            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
+            "Для использования бота необходима подписка на канал @arrows_game\n\n"
+            "Подпишитесь и попробуйте снова с /start",
+            parse_mode='Markdown'
+        )
+        return
+    
+    stats = get_user_stats(user_id)
+    if stats:
+        stats_text = f"""📊 *ВАША СТАТИСТИКА*
+
+👤 *Игрок:* {stats['username']}
+🏆 *Уровень:* {stats['level']}
+⭐ *Очки:* {stats['score']}
+💰 *Монеты:* {stats['coins']}
+🎮 *Игр сыграно:* {stats['games_played']}
+🕐 *Последняя активность:* {stats['last_active']}"""
+    else:
+        stats_text = "Вы еще не начали играть! Нажмите '🎮 Играть', чтобы начать."
+    
+    await update.message.reply_text(stats_text, parse_mode='Markdown')
+
+# Команда /leaderboard
+async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user_id, context)
+    if not is_subscribed:
+        await update.message.reply_text(
+            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
+            "Для использования бота необходима подписка на канал @arrows_game\n\n"
+            "Подпишитесь и попробуйте снова с /start",
+            parse_mode='Markdown'
+        )
+        return
+    
+    leaderboard = get_leaderboard()
+    
+    leaderboard_text = "🏆 *ТОП-10 ИГРОКОВ*\n\n"
+    for player in leaderboard:
+        medal = ""
+        if player['rank'] == 1:
+            medal = "🥇"
+        elif player['rank'] == 2:
+            medal = "🥈"
+        elif player['rank'] == 3:
+            medal = "🥉"
+        else:
+            medal = f"{player['rank']}."
+        
+        leaderboard_text += f"{medal} *{player['username']}*\n   Уровень: {player['level']} | Очки: {player['score']} | Монеты: {player['coins']}\n\n"
+    
+    await update.message.reply_text(leaderboard_text, parse_mode='Markdown')
+
+# Обработка текстовых сообщений
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.lower()
+    
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user_id, context)
+    if not is_subscribed:
+        await update.message.reply_text(
+            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
+            "Для использования бота необходима подписка на канал @arrows_game\n\n"
+            "Используйте /start для начала работы",
+            parse_mode='Markdown'
+        )
+        return
+    
+    if text in ['статистика', 'стата', 'stats', 'stat']:
+        await stats_command(update, context)
+    elif text in ['лидерборд', 'лидеры', 'топ', 'leaderboard', 'top']:
+        await leaderboard_command(update, context)
+    elif text in ['помощь', 'хелп', 'help', 'commands']:
+        await help_command(update, context)
+    elif text in ['играть', 'game', 'play', 'старт']:
+        await update.message.reply_text(
+            "🎮 *Запуск игры*\n\n"
+            "Нажмите кнопку ниже, чтобы начать игру:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎮 Играть", web_app=WebAppInfo(url=GAME_URL))]
+            ]),
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "🤔 *Не понимаю ваше сообщение*\n\n"
+            "Используйте /start для отображения меню или /help для помощи.",
+            parse_mode='Markdown'
+        )
+
+# Основная функция запуска бота
+async def main():
+    # Создаем приложение
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Добавляем обработчики команд
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    
+    # Обработчик кнопок
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Обработчик текстовых сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Запускаем бота
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# Точка входа
+if __name__ == '__main__':
+    print("🚀 Запуск бота Arrows Pro Ultra...")
+    print(f"📢 Канал для подписки: {CHANNEL_ID}")
+    print(f"🎮 URL игры: {GAME_URL}")
+    print(f"🛠 Бот поддержки: {SUPPORT_BOT}")
+    
+    # Запускаем асинхронную главную функцию
+    asyncio.run(main())
