@@ -4,9 +4,9 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
+from datetime import datetime
 
 app = Flask(__name__)
-# Настраиваем CORS для работы с мини-приложением
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Конфигурация
@@ -17,130 +17,181 @@ GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
 
 # ========== БАЗОВЫЕ ФУНКЦИИ ==========
 def load_data():
-    """Загружает данные из файла"""
+    """Загружает данные из файла и нормализует структуру"""
     try:
-        print(f"Пытаюсь загрузить данные из {DATA_FILE}")
+        print(f"Загрузка данных из {DATA_FILE}")
         
         if not os.path.exists(DATA_FILE):
-            print(f"Файл {DATA_FILE} не найден. Создаю пустую базу.")
-            # Создаем пустой файл
-            with open(DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-            return {}
+            print("Файл не существует, создаю пустую структуру")
+            return {"users": {}, "shop_items": {}, "leaderboard": []}
         
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            if not content:
-                print("Файл пустой. Возвращаю пустой словарь.")
-                return {}
+            data = json.load(f)
+            print(f"Загружено {len(data.get('users', {}))} пользователей из файла")
             
-            data = json.loads(content)
-            print(f"Успешно загружено {len(data)} пользователей")
+            # Если файл имеет старую структуру (пользователи в корне), конвертируем её
+            if "users" not in data:
+                print("Обнаружена старая структура файла, конвертирую...")
+                users = {}
+                for key, value in data.items():
+                    if key.isdigit():  # Это user_id
+                        users[key] = value
+                
+                # Сохраняем shop_items если есть
+                shop_items = data.get("shop_items", {
+                    "arrow_skins": [
+                        {"id": "default", "name": "Классический", "price": 0},
+                        {"id": "fire", "name": "Огненный", "price": 100},
+                        {"id": "ice", "name": "Ледяной", "price": 150},
+                        {"id": "gold", "name": "Золотой", "price": 300},
+                        {"id": "neon", "name": "Неоновый", "price": 200},
+                        {"id": "rainbow", "name": "Радужный", "price": 500}
+                    ]
+                })
+                
+                leaderboard = data.get("leaderboard", [])
+                
+                data = {
+                    "users": users,
+                    "shop_items": shop_items,
+                    "leaderboard": leaderboard
+                }
+                
+                # Сохраняем новую структуру
+                save_normalized_data(data)
+            
             return data
             
     except json.JSONDecodeError as e:
-        print(f"Ошибка JSON в файле: {e}")
-        print("Создаю новый файл с тестовыми данными...")
-        # Создаем тестовые данные
-        test_data = create_test_data()
-        save_data(test_data)
-        return test_data
+        print(f"Ошибка JSON: {e}")
+        print("Создаю новую структуру данных...")
+        return {"users": {}, "shop_items": {}, "leaderboard": []}
     except Exception as e:
-        print(f"Ошибка загрузки данных: {e}")
+        print(f"Ошибка загрузки: {e}")
         traceback.print_exc()
-        return {}
+        return {"users": {}, "shop_items": {}, "leaderboard": []}
 
-def create_test_data():
-    """Создает тестовые данные"""
-    return {
-        "123456": {
-            "username": "Игрок_Алексей",
-            "score": 25,
-            "games_played": 30,
-            "coins": 150,
-            "level": 26
-        },
-        "654321": {
-            "username": "Профи_Мария",
-            "score": 42,
-            "games_played": 50,
-            "coins": 300,
-            "level": 43
-        },
-        "111111": {
-            "username": "Новичок_Иван",
-            "score": 5,
-            "games_played": 8,
-            "coins": 40,
-            "level": 6
-        }
-    }
-
-def save_data(data):
-    """Сохраняет данные в файл"""
+def save_normalized_data(data):
+    """Сохраняет данные в нормализованной структуре"""
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"Сохранено {len(data)} пользователей")
+        print(f"Сохранено {len(data.get('users', {}))} пользователей")
         return True
     except Exception as e:
         print(f"Ошибка сохранения: {e}")
         return False
 
-def ensure_data_file():
-    """Проверяет и создает файл данных если нужно"""
+def get_users():
+    """Получает словарь пользователей из данных"""
+    data = load_data()
+    return data.get("users", {})
+
+def save_user(user_id, user_data):
+    """Сохраняет данные одного пользователя"""
     try:
-        if not os.path.exists(DATA_FILE):
-            print(f"Файл {DATA_FILE} не существует. Создаю...")
-            test_data = create_test_data()
-            save_data(test_data)
-            return True
+        data = load_data()
+        users = data.get("users", {})
         
-        # Проверяем, что файл читается
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
-            if not content.strip():
-                print("Файл пустой. Заполняю тестовыми данными...")
-                test_data = create_test_data()
-                save_data(test_data)
+        # Обновляем данные пользователя
+        user_id_str = str(user_id)
+        if user_id_str not in users:
+            users[user_id_str] = {}
         
+        # Объединяем старые и новые данные
+        users[user_id_str].update(user_data)
+        
+        # Добавляем/обновляем timestamp
+        users[user_id_str]["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Сохраняем обратно
+        data["users"] = users
+        save_normalized_data(data)
+        
+        print(f"Сохранен пользователь {user_id_str}: {users[user_id_str]}")
         return True
     except Exception as e:
-        print(f"Ошибка при проверке файла данных: {e}")
+        print(f"Ошибка сохранения пользователя: {e}")
         return False
+
+def update_user_score(user_id, username, level, coins_earned):
+    """Обновляет счет пользователя"""
+    try:
+        user_id_str = str(user_id)
+        users = get_users()
+        
+        if user_id_str not in users:
+            # Создаем нового пользователя
+            user_data = {
+                "username": username,
+                "score": level - 1,
+                "games_played": 1,
+                "level": level,
+                "coins": coins_earned,
+                "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+        else:
+            # Обновляем существующего
+            user_data = users[user_id_str]
+            
+            # Увеличиваем счетчик игр
+            user_data["games_played"] = user_data.get("games_played", 0) + 1
+            
+            # Обновляем уровень если он выше
+            current_level = user_data.get("level", 1)
+            if level > current_level:
+                user_data["level"] = level
+                user_data["score"] = level - 1
+            
+            # Добавляем монеты
+            user_data["coins"] = user_data.get("coins", 0) + coins_earned
+            
+            # Обновляем имя если нужно
+            if username and username != 'Guest':
+                user_data["username"] = username
+        
+        save_user(user_id, user_data)
+        return user_data
+    except Exception as e:
+        print(f"Ошибка обновления счета: {e}")
+        return None
 
 # ========== API ДЛЯ ИГРЫ ==========
 @app.route('/api/get_user', methods=['POST'])
 def get_user():
-    """Получение данных пользователя"""
+    """Получение данных пользователя для игры"""
     print("\n=== API: GET_USER ===")
     try:
         data = request.get_json()
-        print(f"Получены данные: {data}")
-        
         user_id = str(data.get('user_id', '0'))
         username = data.get('username', 'Guest')
         first_name = data.get('first_name', '')
         
-        print(f"User ID: {user_id}, Username: {username}")
+        print(f"Запрос данных пользователя {user_id} ({username})")
         
-        users = load_data()
-        print(f"Загружено пользователей: {len(users)}")
+        users = get_users()
         
         if user_id not in users:
-            users[user_id] = {
-                "username": username,
-                "first_name": first_name,
+            # Создаем нового пользователя
+            user_data = {
+                "username": username or f"User_{user_id}",
                 "score": 0,
                 "games_played": 0,
                 "coins": 0,
-                "level": 1
+                "level": 1,
+                "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
-            save_data(users)
+            save_user(user_id, user_data)
             print(f"Создан новый пользователь: {user_id}")
+        else:
+            user_data = users[user_id]
+            print(f"Найден существующий пользователь: {user_data}")
         
-        user_data = users[user_id]
-        print(f"Возвращаю данные: {user_data}")
+        # Гарантируем наличие всех полей
+        required_fields = ['username', 'score', 'games_played', 'coins', 'level']
+        for field in required_fields:
+            if field not in user_data:
+                user_data[field] = 0 if field in ['score', 'games_played', 'coins'] else 1 if field == 'level' else ''
         
         return jsonify({
             "success": True, 
@@ -161,50 +212,29 @@ def update_score():
     print("\n=== API: UPDATE_SCORE ===")
     try:
         data = request.get_json()
-        print(f"Данные: {data}")
-        
         user_id = str(data.get('user_id', '0'))
         username = data.get('username', 'Guest')
-        new_level = int(data.get('level', 1))
+        level = int(data.get('level', 1))
         coins_earned = int(data.get('coins_earned', 0))
         
-        print(f"Обновление для {user_id}: уровень={new_level}, монеты={coins_earned}")
+        print(f"Обновление счета для {user_id}: уровень={level}, монеты={coins_earned}")
         
-        users = load_data()
+        # Обновляем данные пользователя
+        user_data = update_user_score(user_id, username, level, coins_earned)
         
-        if user_id not in users:
-            # Создаем нового пользователя
-            users[user_id] = {
-                "username": username,
-                "score": new_level - 1,
-                "games_played": 1,
-                "coins": coins_earned,
-                "level": new_level
-            }
+        if user_data:
+            return jsonify({
+                "success": True, 
+                "coins": user_data.get("coins", 0),
+                "level": user_data.get("level", 1),
+                "score": user_data.get("score", 0)
+            })
         else:
-            # Обновляем существующего
-            user = users[user_id]
-            if new_level > user.get('level', 1):
-                user['level'] = new_level
-                user['score'] = new_level - 1
+            return jsonify({
+                "success": False,
+                "error": "Failed to update user score"
+            }), 500
             
-            user['coins'] = user.get('coins', 0) + coins_earned
-            user['games_played'] = user.get('games_played', 0) + 1
-            if username != 'Guest':
-                user['username'] = username
-        
-        save_data(users)
-        
-        updated_user = users[user_id]
-        print(f"Обновленный пользователь: {updated_user}")
-        
-        return jsonify({
-            "success": True, 
-            "coins": updated_user['coins'],
-            "level": updated_user['level'],
-            "score": updated_user['score']
-        })
-        
     except Exception as e:
         print(f"Ошибка в update_score: {e}")
         traceback.print_exc()
@@ -215,27 +245,30 @@ def get_leaderboard():
     """Получение таблицы лидеров для игры"""
     print("\n=== API: LEADERBOARD ===")
     try:
-        # Сначала убедимся, что файл существует
-        ensure_data_file()
-        
-        users = load_data()
+        users = get_users()
         print(f"Всего пользователей: {len(users)}")
         
         # Преобразуем в список для сортировки
         leaderboard_list = []
         for user_id_str, user_data in users.items():
             try:
-                # Пробуем преобразовать ID в число
+                # Пытаемся преобразовать user_id в число
                 user_id_num = int(user_id_str)
             except:
                 user_id_num = 0
             
+            # Гарантируем наличие всех необходимых полей
+            username = user_data.get("username", f"Player_{user_id_str}")
+            score = user_data.get("score", 0)
+            level = user_data.get("level", 1)
+            coins = user_data.get("coins", 0)
+            
             leaderboard_list.append({
                 "user_id": user_id_num,
-                "username": user_data.get("username", f"Player_{user_id_str}"),
-                "score": user_data.get("score", 0),
-                "level": user_data.get("level", 1),
-                "coins": user_data.get("coins", 0)
+                "username": username,
+                "score": score,
+                "level": level,
+                "coins": coins
             })
         
         # Сортируем по score (пройденные уровни)
@@ -246,8 +279,10 @@ def get_leaderboard():
         )[:10]  # Только топ-10
         
         print(f"Лидерборд содержит {len(sorted_leaderboard)} игроков")
-        for i, player in enumerate(sorted_leaderboard, 1):
-            print(f"{i}. {player['username']} - {player['score']} уровней")
+        
+        # Если нет игроков, возвращаем пустой массив
+        if not sorted_leaderboard:
+            print("Лидерборд пуст")
         
         return jsonify({
             "success": True, 
@@ -269,7 +304,6 @@ def telegram_webhook():
     print("\n=== TELEGRAM WEBHOOK ===")
     try:
         update = request.get_json()
-        print(f"Получен update: {update}")
         
         if "message" in update and "text" in update["message"]:
             chat_id = update["message"]["chat"]["id"]
@@ -277,7 +311,7 @@ def telegram_webhook():
             username = update["message"]["from"].get("username", "Гость")
             text = update["message"]["text"]
             
-            if text == "/start":
+            if text == "/start" or text.startswith("/start"):
                 print(f"Обработка /start от {user_id} ({username})")
                 
                 # Проверяем подписку
@@ -292,7 +326,8 @@ def telegram_webhook():
                         if data.get("ok"):
                             status = data["result"].get("status", "left")
                             is_member = status in ["creator", "administrator", "member"]
-                except:
+                except Exception as e:
+                    print(f"Ошибка проверки подписки: {e}")
                     is_member = False
                 
                 if not is_member:
@@ -308,25 +343,28 @@ def telegram_webhook():
                         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                         json={
                             "chat_id": chat_id,
-                            "text": "⚠️ *Для использования бота нужно подписаться на канал @arrows_game*",
+                            "text": "⚠️ *Для использования бота нужно подписаться на канал @arrows_game*\n\nПосле подписки нажмите кнопку 'Проверить'",
                             "parse_mode": "Markdown",
                             "reply_markup": keyboard
-                        }
+                        },
+                        timeout=5
                     )
                 else:
                     # Подписан - показываем меню
                     # Сохраняем пользователя
-                    users = load_data()
-                    user_key = str(user_id)
-                    if user_key not in users:
-                        users[user_key] = {
+                    user_id_str = str(user_id)
+                    users = get_users()
+                    
+                    if user_id_str not in users:
+                        user_data = {
                             "username": username,
                             "score": 0,
                             "games_played": 0,
                             "coins": 0,
-                            "level": 1
+                            "level": 1,
+                            "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         }
-                        save_data(users)
+                        save_user(user_id, user_data)
                     
                     # Главное меню
                     keyboard = {
@@ -349,7 +387,8 @@ def telegram_webhook():
                             "text": f"🎮 *Добро пожаловать, {username}!*\n\nВыберите действие:",
                             "parse_mode": "Markdown",
                             "reply_markup": keyboard
-                        }
+                        },
+                        timeout=5
                     )
         
         elif "callback_query" in update:
@@ -362,11 +401,12 @@ def telegram_webhook():
             
             print(f"Callback: {data} от {user_id}")
             
-            # Отвечаем на callback
+            # Отвечаем на callback (убираем "часики")
             try:
                 requests.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery",
-                    json={"callback_query_id": callback_id}
+                    json={"callback_query_id": callback_id},
+                    timeout=5
                 )
             except:
                 pass
@@ -395,9 +435,17 @@ def telegram_webhook():
                             "message_id": message_id,
                             "text": "✅ *Подписка подтверждена!*\n\nИспользуйте /start для доступа к меню.",
                             "parse_mode": "Markdown"
-                        }
+                        },
+                        timeout=5
                     )
                 else:
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
+                            {"text": "✅ Проверить", "callback_data": "check_sub"}
+                        ]]
+                    }
+                    
                     requests.post(
                         f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText",
                         json={
@@ -405,17 +453,13 @@ def telegram_webhook():
                             "message_id": message_id,
                             "text": "❌ *Вы еще не подписались!*\n\nНажмите кнопку ниже, чтобы подписаться на @arrows_game",
                             "parse_mode": "Markdown",
-                            "reply_markup": {
-                                "inline_keyboard": [[
-                                    {"text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
-                                    {"text": "✅ Проверить", "callback_data": "check_sub"}
-                                ]]
-                            }
-                        }
+                            "reply_markup": keyboard
+                        },
+                        timeout=5
                     )
             
             elif data == "stats":
-                users = load_data()
+                users = get_users()
                 user_key = str(user_id)
                 user = users.get(user_key, {})
                 
@@ -425,7 +469,15 @@ def telegram_webhook():
 🏆 Уровень: {user.get('level', 1)}
 ⭐ Очки: {user.get('score', 0)}
 💰 Монеты: {user.get('coins', 0)}
-🎮 Игр сыграно: {user.get('games_played', 0)}"""
+🎮 Игр сыграно: {user.get('games_played', 0)}
+🕒 Активен: {user.get('last_active', 'никогда')}"""
+                
+                keyboard = {
+                    "inline_keyboard": [[
+                        {"text": "🎮 Играть", "web_app": {"url": GAME_URL}},
+                        {"text": "🔙 Назад", "callback_data": "back"}
+                    ]]
+                }
                 
                 requests.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText",
@@ -434,15 +486,14 @@ def telegram_webhook():
                         "message_id": message_id,
                         "text": stats_text,
                         "parse_mode": "Markdown",
-                        "reply_markup": {
-                            "inline_keyboard": [[{"text": "🔙 Назад", "callback_data": "back"}]]
-                        }
-                    }
+                        "reply_markup": keyboard
+                    },
+                    timeout=5
                 )
             
             elif data == "top":
                 try:
-                    users = load_data()
+                    users = get_users()
                     print(f"Пользователей для лидерборда: {len(users)}")
                     
                     if not users:
@@ -459,8 +510,18 @@ def telegram_webhook():
                         for i, (player_id, player_data) in enumerate(sorted_users, 1):
                             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                             name = player_data.get('username', f'Игрок_{player_id}')
+                            if len(name) > 15:
+                                name = name[:15] + "..."
                             score = player_data.get('score', 0)
-                            top_text += f"{medal} {name} - {score} очков\n"
+                            level = player_data.get('level', 1)
+                            top_text += f"{medal} *{name}*\n   Уровень: {level} | Очки: {score}\n\n"
+                    
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "🎮 Играть", "web_app": {"url": GAME_URL}},
+                            {"text": "🔙 Назад", "callback_data": "back"}
+                        ]]
+                    }
                     
                     requests.post(
                         f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText",
@@ -469,10 +530,9 @@ def telegram_webhook():
                             "message_id": message_id,
                             "text": top_text,
                             "parse_mode": "Markdown",
-                            "reply_markup": {
-                                "inline_keyboard": [[{"text": "🔙 Назад", "callback_data": "back"}]]
-                            }
-                        }
+                            "reply_markup": keyboard
+                        },
+                        timeout=5
                     )
                     
                 except Exception as e:
@@ -489,17 +549,36 @@ def telegram_webhook():
                             "reply_markup": {
                                 "inline_keyboard": [[{"text": "🔙 Назад", "callback_data": "back"}]]
                             }
-                        }
+                        },
+                        timeout=5
                     )
             
             elif data == "back":
+                username = callback["from"].get("username", "Гость")
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "🎮 Играть", "web_app": {"url": GAME_URL}}],
+                        [
+                            {"text": "📊 Статистика", "callback_data": "stats"},
+                            {"text": "🏆 Топ игроков", "callback_data": "top"}
+                        ],
+                        [
+                            {"text": "🛠 Поддержка", "url": "https://t.me/arrow_game_supprot_bot"}
+                        ]
+                    ]
+                }
+                
                 requests.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText",
                     json={
                         "chat_id": chat_id,
-                        "text": "Нажмите /start чтобы открыть меню",
-                        "parse_mode": "Markdown"
-                    }
+                        "message_id": message_id,
+                        "text": f"🎮 *Меню Arrows Game*\n\nПривет, {username}! Выберите действие:",
+                        "parse_mode": "Markdown",
+                        "reply_markup": keyboard
+                    },
+                    timeout=5
                 )
         
         return jsonify({"ok": True}), 200
@@ -515,23 +594,24 @@ def test_api():
     return jsonify({
         "success": True,
         "message": "API работает!",
-        "data_file": DATA_FILE,
-        "file_exists": os.path.exists(DATA_FILE)
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
 
 @app.route('/api/debug', methods=['GET'])
 def debug_info():
     """Отладочная информация"""
     try:
-        users = load_data()
+        data = load_data()
+        users = data.get("users", {})
         
         info = {
             "success": True,
             "data_file": DATA_FILE,
             "file_exists": os.path.exists(DATA_FILE),
-            "file_size": os.path.getsize(DATA_FILE) if os.path.exists(DATA_FILE) else 0,
             "users_count": len(users),
-            "users": users
+            "users": users,
+            "shop_items_exists": "shop_items" in data,
+            "leaderboard_exists": "leaderboard" in data
         }
         
         return jsonify(info)
@@ -541,18 +621,42 @@ def debug_info():
             "error": str(e)
         })
 
-@app.route('/api/reset', methods=['GET'])
-def reset_data():
-    """Сброс данных к тестовым (только для отладки)"""
+@app.route('/api/fix_structure', methods=['GET'])
+def fix_structure():
+    """Исправляет структуру файла данных"""
     try:
-        test_data = create_test_data()
-        save_data(test_data)
+        print("Исправление структуры файла данных...")
+        
+        # Загружаем текущие данные
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            old_data = json.load(f)
+        
+        # Создаем новую структуру
+        new_data = {
+            "users": {},
+            "shop_items": old_data.get("shop_items", {}),
+            "leaderboard": old_data.get("leaderboard", [])
+        }
+        
+        # Переносим пользователей
+        for key, value in old_data.items():
+            if key.isdigit():  # Это user_id
+                new_data["users"][key] = value
+        
+        # Сохраняем новую структуру
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(new_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"Структура исправлена. Перенесено {len(new_data['users'])} пользователей.")
+        
         return jsonify({
             "success": True,
-            "message": "Данные сброшены к тестовым",
-            "users_count": len(test_data)
+            "message": f"Структура исправлена. Перенесено {len(new_data['users'])} пользователей.",
+            "users_count": len(new_data["users"])
         })
+        
     except Exception as e:
+        print(f"Ошибка исправления структуры: {e}")
         return jsonify({
             "success": False,
             "error": str(e)
@@ -565,7 +669,7 @@ def set_webhook():
     try:
         webhook_url = "https://malollas.pythonanywhere.com/api/telegram"
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         return response.text
     except Exception as e:
         return f"Ошибка: {str(e)}"
@@ -633,7 +737,7 @@ def home():
             <a href="/api/test" class="btn">Тест API</a>
             <a href="/api/debug" class="btn">Информация о данных</a>
             <a href="/api/leaderboard" class="btn">Лидерборд (JSON)</a>
-            <a href="/api/reset" class="btn btn-danger">Сбросить данные</a>
+            <a href="/api/fix_structure" class="btn btn-danger">Исправить структуру данных</a>
             
             <h2>📊 API Endpoints:</h2>
             <div class="endpoint">GET /api/test - Тест работы API</div>
@@ -643,24 +747,25 @@ def home():
             <div class="endpoint">POST /api/telegram - Вебхук Telegram</div>
             <div class="endpoint">GET /api/debug - Отладочная информация</div>
             
-            <h2>📝 Проверка данных:</h2>
-            <p>Файл данных: <code>""" + DATA_FILE + """</code></p>
-            <p>Существует: <span id="file-status">Проверка...</span></p>
+            <h2>📝 Статус данных:</h2>
+            <p id="status">Загрузка...</p>
             
             <script>
-                // Проверяем статус файла
                 fetch('/api/debug')
                     .then(response => response.json())
                     .then(data => {
                         if(data.success) {
-                            document.getElementById('file-status').innerHTML = 
-                                '✅ Да (' + data.file_size + ' байт, ' + data.users_count + ' пользователей)';
+                            document.getElementById('status').innerHTML = 
+                                '✅ Файл данных: ' + data.data_file + '<br>' +
+                                '👥 Пользователей: ' + data.users_count + '<br>' +
+                                '🛍️ Магазин: ' + (data.shop_items_exists ? '✅' : '❌') + '<br>' +
+                                '🏆 Лидерборд: ' + (data.leaderboard_exists ? '✅' : '❌');
                         } else {
-                            document.getElementById('file-status').innerHTML = '❌ Ошибка: ' + data.error;
+                            document.getElementById('status').innerHTML = '❌ Ошибка: ' + data.error;
                         }
                     })
                     .catch(error => {
-                        document.getElementById('file-status').innerHTML = '❌ Ошибка запроса';
+                        document.getElementById('status').innerHTML = '❌ Ошибка запроса: ' + error;
                     });
             </script>
         </div>
@@ -674,23 +779,21 @@ if __name__ == '__main__':
     print("🚀 Запуск Arrows Game Bot")
     print("=" * 60)
     
-    # Проверяем и создаем файл данных
-    print(f"📁 Файл данных: {DATA_FILE}")
-    print(f"📝 Проверяю файл данных...")
-    
-    if ensure_data_file():
-        print("✅ Файл данных готов")
+    # Проверяем файл данных
+    if os.path.exists(DATA_FILE):
+        print(f"📁 Файл данных найден: {DATA_FILE}")
+        data = load_data()
+        users = data.get("users", {})
+        print(f"👥 Пользователей в базе: {len(users)}")
+        
+        # Показываем пользователей
+        for user_id, user_data in users.items():
+            print(f"   {user_id}: {user_data.get('username', 'Unknown')} - уровень {user_data.get('level', 1)}, очков: {user_data.get('score', 0)}")
     else:
-        print("❌ Проблема с файлом данных")
-    
-    # Загружаем данные для проверки
-    users = load_data()
-    print(f"👥 Пользователей в базе: {len(users)}")
+        print(f"📁 Файл данных не найден. Будет создан при первом обращении.")
     
     print("=" * 60)
-    print("🌐 Сервер запущен на http://0.0.0.0:5000")
+    print("🌐 Сервер запущен")
     print("=" * 60)
     
-    # Для PythonAnywhere используем app как WSGI приложение
-    # В production это будет обрабатываться через uWSGI
     app.run(debug=False, host='0.0.0.0', port=5000)
