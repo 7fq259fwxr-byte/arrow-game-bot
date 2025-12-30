@@ -14,13 +14,14 @@ BOT_TOKEN = "8124600551:AAHYE9GXQHmc3bAe1kABfqHBmmOKqQQliWU"
 DATA_FILE = "/home/malollas/arrows_data.json"
 CHANNEL_ID = "@arrows_game"
 GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
+BANNER_URL = "https://github.com/7fq259fwxr-byte/arrowgame/blob/910f4b5f6e70976b166a005f73c3d69d405f786f/IMG_9228.png"  # Замени на реальный URL баннера
 
 # Мультиязычные тексты
 TEXTS = {
     "ru": {
         "welcome": """🎮 *ДОБРО ПОЖАЛОВАТЬ В ARROWS GAME, {username}!*
 
-*Arrows Pro Ultra* — это захватывающая игра на логику, где твоя цель — *очистить поле от всех стрелок*!
+Arrows Pro — это захватывающая игра на логику, где твоя цель — очистить поле от всех стрелок!
 
 🎯 *СУТЬ ИГРЫ:*
 • На игровом поле расположены стрелки
@@ -32,9 +33,9 @@ TEXTS = {
 ✨ *ОСОБЕННОСТИ:*
 • 🧠 Развивает логическое мышление
 • 🎯 100+ уровней сложности
-• 🏆 Система достижений и лидерборд
+• 🏆 Система лидерборда
 • 💰 Внутриигровая валюта
-• 🎨 Скины для стрелок
+• 🎨 Скины для стрелок (coming soon)
 
 *Выберите действие ниже:*""",
         "subscribe": "⚠️ *Для использования бота нужно подписаться на канал @arrows_game*\n\nПосле подписки нажмите кнопку 'Проверить'",
@@ -67,7 +68,7 @@ TEXTS = {
     "en": {
         "welcome": """🎮 *WELCOME TO ARROWS GAME, {username}!*
 
-*Arrows Pro Ultra* is an exciting logic game where your goal is to *clear the field of all arrows*!
+Arrows Pro is an exciting logic game where your goal is to clear the field of all arrows!
 
 🎯 *GAME ESSENCE:*
 • Arrows are placed on the game field
@@ -79,9 +80,9 @@ TEXTS = {
 ✨ *FEATURES:*
 • 🧠 Develops logical thinking
 • 🎯 100+ difficulty levels
-• 🏆 Achievement system and leaderboard
+• 🏆 Leaderboard system
 • 💰 In-game currency
-• 🎨 Arrow skins
+• 🎨 Arrow skins (coming soon)
 
 *Choose an action below:*""",
         "subscribe": "⚠️ *To use the bot you need to subscribe to the channel @arrows_game*\n\nAfter subscribing, click the 'Check' button",
@@ -114,7 +115,7 @@ TEXTS = {
     "zh": {
         "welcome": """🎮 *欢迎来到ARROWS GAME, {username}!*
 
-*Arrows Pro Ultra* 是一款令人兴奋的逻辑游戏，你的目标是*清除场上所有箭头*！
+Arrows Pro 是一款令人兴奋的逻辑游戏，你的目标是清除场上所有箭头！
 
 🎯 *游戏本质：*
 • 箭头放置在游戏场上
@@ -126,9 +127,9 @@ TEXTS = {
 ✨ *特点：*
 • 🧠 培养逻辑思维
 • 🎯 100+难度等级
-• 🏆 成就系统和排行榜
+• 🏆 排行榜系统
 • 💰 游戏内货币
-• 🎨 箭头皮肤
+• 🎨 箭头皮肤 (即将推出)
 
 *选择以下操作：*""",
         "subscribe": "⚠️ *要使用机器人，您需要订阅频道 @arrows_game*\n\n订阅后，点击'检查'按钮",
@@ -168,6 +169,67 @@ def get_user_language(user_id, from_tg=None):
         return "ru"
     except:
         return "ru"
+
+def send_welcome_with_photo(chat_id, username, lang):
+    """Отправляет приветственное сообщение с фото"""
+    try:
+        welcome_text = TEXTS[lang]["welcome"].format(username=username)
+        
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": TEXTS[lang]["play_btn"], "web_app": {"url": GAME_URL}}],
+                [
+                    {"text": TEXTS[lang]["stats_btn"], "callback_data": "stats"},
+                    {"text": TEXTS[lang]["top_btn"], "callback_data": "top"}
+                ],
+                [
+                    {"text": TEXTS[lang]["support_btn"], "url": "https://t.me/arrow_game_supprot_bot"},
+                    {"text": TEXTS[lang]["channel_btn"], "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"}
+                ]
+            ]
+        }
+        
+        # Сначала отправляем фото с текстом
+        photo_response = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+            json={
+                "chat_id": chat_id,
+                "photo": BANNER_URL,
+                "caption": f"🎮 *ДОБРО ПОЖАЛОВАТЬ В ARROWS GAME, {username}!*\n\nArrows Pro — это захватывающая игра на логику, где твоя цель — очистить поле от всех стрелок!",
+                "parse_mode": "Markdown"
+            },
+            timeout=10
+        )
+        
+        # Затем отправляем подробное сообщение с кнопками
+        if photo_response.status_code == 200:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": welcome_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": keyboard
+                },
+                timeout=10
+            )
+        else:
+            # Если не удалось отправить фото, отправляем только текст с кнопками
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": welcome_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": keyboard
+                },
+                timeout=10
+            )
+            
+        return True
+    except Exception as e:
+        print(f"Ошибка отправки приветствия с фото: {e}")
+        return False
 
 # ========== БАЗОВЫЕ ФУНКЦИИ ==========
 def load_data():
@@ -406,7 +468,6 @@ def get_leaderboard():
         leaderboard_list = []
         for user_id_str, user_data in users.items():
             try:
-                # Пытаемся преобразовать user_id в число
                 user_id_num = int(user_id_str)
             except:
                 user_id_num = 0
@@ -583,33 +644,8 @@ def telegram_webhook():
                         }
                         save_user(user_id, user_data)
                     
-                    # Приветственное сообщение на выбранном языке
-                    welcome_text = TEXTS[lang]["welcome"].format(username=username)
-                    
-                    keyboard = {
-                        "inline_keyboard": [
-                            [{"text": TEXTS[lang]["play_btn"], "web_app": {"url": GAME_URL}}],
-                            [
-                                {"text": TEXTS[lang]["stats_btn"], "callback_data": "stats"},
-                                {"text": TEXTS[lang]["top_btn"], "callback_data": "top"}
-                            ],
-                            [
-                                {"text": TEXTS[lang]["support_btn"], "url": "https://t.me/arrow_game_supprot_bot"},
-                                {"text": TEXTS[lang]["channel_btn"], "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"}
-                            ]
-                        ]
-                    }
-                    
-                    requests.post(
-                        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                        json={
-                            "chat_id": chat_id,
-                            "text": welcome_text,
-                            "parse_mode": "Markdown",
-                            "reply_markup": keyboard
-                        },
-                        timeout=5
-                    )
+                    # Отправляем приветствие с фото
+                    send_welcome_with_photo(chat_id, username, lang)
         
         elif "callback_query" in update:
             callback = update["callback_query"]
