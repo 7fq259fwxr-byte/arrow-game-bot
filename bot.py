@@ -15,6 +15,160 @@ DATA_FILE = "/home/malollas/arrows_data.json"
 CHANNEL_ID = "@arrows_game"
 GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
 
+# Мультиязычные тексты
+TEXTS = {
+    "ru": {
+        "welcome": """🎮 *ДОБРО ПОЖАЛОВАТЬ В ARROWS GAME, {username}!*
+
+*Arrows Pro Ultra* — это захватывающая игра на логику, где твоя цель — *очистить поле от всех стрелок*!
+
+🎯 *СУТЬ ИГРЫ:*
+• На игровом поле расположены стрелки
+• Каждая стрелка указывает направление (вверх, вниз, влево, вправо)
+• Нажимай на стрелки, чтобы они "вылетали" с поля
+• Стрелки, которые сталкиваются с другими, возвращаются назад
+• *Цель: очистить всё поле, кликая по стрелкам в правильном порядке!*
+
+✨ *ОСОБЕННОСТИ:*
+• 🧠 Развивает логическое мышление
+• 🎯 100+ уровней сложности
+• 🏆 Система достижений и лидерборд
+• 💰 Внутриигровая валюта
+• 🎨 Скины для стрелок
+
+*Выберите действие ниже:*""",
+        "subscribe": "⚠️ *Для использования бота нужно подписаться на канал @arrows_game*\n\nПосле подписки нажмите кнопку 'Проверить'",
+        "sub_confirmed": "✅ *Подписка подтверждена!*\n\nИспользуйте /start для доступа к меню.",
+        "not_subscribed": "❌ *Вы еще не подписались!*\n\nНажмите кнопку ниже, чтобы подписаться на @arrows_game",
+        "stats": """📊 *ВАША СТАТИСТИКА В ARROWS GAME:*
+
+🎮 *Игрок:* {username}
+🏆 *Текущий уровень:* {level}
+⭐ *Пройдено уровней:* {score}
+💰 *Монеты:* {coins}
+🎯 *Игр сыграно:* {games_played}
+🕒 *Последняя активность:* {last_active}
+
+*Совет:* Чтобы пройти уровень, нужно очистить поле от всех стрелок, нажимая на них в правильном порядке!""",
+        "top_empty": "🏆 *Топ игроков:*\n\nПока никто не играл. Будьте первым!",
+        "top_header": "🏆 *Топ-10 игроков Arrows Game:*\n\n",
+        "back_menu": "🎮 *Меню Arrows Game*\n\nПривет, {username}! Выберите действие:",
+        "subscribe_btn": "📢 Подписаться",
+        "check_btn": "✅ Проверить",
+        "play_btn": "🎮 НАЧАТЬ ИГРУ",
+        "stats_btn": "📊 Моя статистика",
+        "top_btn": "🏆 Топ игроков",
+        "support_btn": "🛠 Поддержка",
+        "channel_btn": "📢 Наш канал",
+        "continue_btn": "🎮 Продолжить игру",
+        "back_btn": "🔙 Назад",
+        "play_simple_btn": "🎮 Играть"
+    },
+    "en": {
+        "welcome": """🎮 *WELCOME TO ARROWS GAME, {username}!*
+
+*Arrows Pro Ultra* is an exciting logic game where your goal is to *clear the field of all arrows*!
+
+🎯 *GAME ESSENCE:*
+• Arrows are placed on the game field
+• Each arrow points in a direction (up, down, left, right)
+• Click arrows to make them "fly out" of the field
+• Arrows that collide with others bounce back
+• *Goal: Clear the entire field by clicking arrows in the correct order!*
+
+✨ *FEATURES:*
+• 🧠 Develops logical thinking
+• 🎯 100+ difficulty levels
+• 🏆 Achievement system and leaderboard
+• 💰 In-game currency
+• 🎨 Arrow skins
+
+*Choose an action below:*""",
+        "subscribe": "⚠️ *To use the bot you need to subscribe to the channel @arrows_game*\n\nAfter subscribing, click the 'Check' button",
+        "sub_confirmed": "✅ *Subscription confirmed!*\n\nUse /start to access the menu.",
+        "not_subscribed": "❌ *You haven't subscribed yet!*\n\nClick the button below to subscribe to @arrows_game",
+        "stats": """📊 *YOUR STATISTICS IN ARROWS GAME:*
+
+🎮 *Player:* {username}
+🏆 *Current level:* {level}
+⭐ *Levels completed:* {score}
+💰 *Coins:* {coins}
+🎯 *Games played:* {games_played}
+🕒 *Last active:* {last_active}
+
+*Tip:* To pass a level, you need to clear the field of all arrows by clicking them in the correct order!""",
+        "top_empty": "🏆 *Top players:*\n\nNo one has played yet. Be the first!",
+        "top_header": "🏆 *Top-10 Arrows Game Players:*\n\n",
+        "back_menu": "🎮 *Arrows Game Menu*\n\nHello, {username}! Choose an action:",
+        "subscribe_btn": "📢 Subscribe",
+        "check_btn": "✅ Check",
+        "play_btn": "🎮 START GAME",
+        "stats_btn": "📊 My Statistics",
+        "top_btn": "🏆 Top Players",
+        "support_btn": "🛠 Support",
+        "channel_btn": "📢 Our Channel",
+        "continue_btn": "🎮 Continue Game",
+        "back_btn": "🔙 Back",
+        "play_simple_btn": "🎮 Play"
+    },
+    "zh": {
+        "welcome": """🎮 *欢迎来到ARROWS GAME, {username}!*
+
+*Arrows Pro Ultra* 是一款令人兴奋的逻辑游戏，你的目标是*清除场上所有箭头*！
+
+🎯 *游戏本质：*
+• 箭头放置在游戏场上
+• 每个箭头指向一个方向（上、下、左、右）
+• 点击箭头让它们"飞出"场地
+• 与其他箭头碰撞的箭头会反弹回来
+• *目标：通过按正确顺序点击箭头来清除整个场地！*
+
+✨ *特点：*
+• 🧠 培养逻辑思维
+• 🎯 100+难度等级
+• 🏆 成就系统和排行榜
+• 💰 游戏内货币
+• 🎨 箭头皮肤
+
+*选择以下操作：*""",
+        "subscribe": "⚠️ *要使用机器人，您需要订阅频道 @arrows_game*\n\n订阅后，点击'检查'按钮",
+        "sub_confirmed": "✅ *订阅确认！*\n\n使用 /start 访问菜单。",
+        "not_subscribed": "❌ *您尚未订阅！*\n\n点击下方按钮订阅 @arrows_game",
+        "stats": """📊 *您在ARROWS GAME中的统计数据：*
+
+🎮 *玩家：* {username}
+🏆 *当前等级：* {level}
+⭐ *完成等级：* {score}
+💰 *金币：* {coins}
+🎯 *游戏次数：* {games_played}
+🕒 *最后活跃：* {last_active}
+
+*提示：* 要通过关卡，您需要通过按正确顺序点击所有箭头来清除场地！""",
+        "top_empty": "🏆 *顶级玩家：*\n\n还没有人玩过。成为第一个！",
+        "top_header": "🏆 *Arrows Game前10名玩家：*\n\n",
+        "back_menu": "🎮 *Arrows Game菜单*\n\n你好, {username}! 选择操作：",
+        "subscribe_btn": "📢 订阅",
+        "check_btn": "✅ 检查",
+        "play_btn": "🎮 开始游戏",
+        "stats_btn": "📊 我的统计",
+        "top_btn": "🏆 顶级玩家",
+        "support_btn": "🛠 支持",
+        "channel_btn": "📢 我们的频道",
+        "continue_btn": "🎮 继续游戏",
+        "back_btn": "🔙 返回",
+        "play_simple_btn": "🎮 游戏"
+    }
+}
+
+def get_user_language(user_id, from_tg=None):
+    """Определяем язык пользователя"""
+    try:
+        # Пока используем русский по умолчанию
+        # В будущем можно сохранять язык в данных пользователя
+        return "ru"
+    except:
+        return "ru"
+
 # ========== БАЗОВЫЕ ФУНКЦИИ ==========
 def load_data():
     """Загружает данные из файла и нормализует структуру"""
@@ -271,12 +425,12 @@ def get_leaderboard():
                 "coins": coins
             })
         
-        # Сортируем по score (пройденные уровни)
+        # СОРТИРУЕМ ПО LEVEL, ПОТОМ ПО SCORE
         sorted_leaderboard = sorted(
             leaderboard_list,
-            key=lambda x: x.get('score', 0),
+            key=lambda x: (x.get('level', 1), x.get('score', 0)),
             reverse=True
-        )[:10]  # Только топ-10
+        )[:100]  # Топ-100 для игры
         
         print(f"Лидерборд содержит {len(sorted_leaderboard)} игроков")
         
@@ -298,6 +452,66 @@ def get_leaderboard():
             "leaderboard": []
         })
 
+@app.route('/api/get_user_rank', methods=['POST'])
+def get_user_rank():
+    """Получение глобального ранга пользователя"""
+    print("\n=== API: GET_USER_RANK ===")
+    try:
+        data = request.get_json()
+        user_id = str(data.get('user_id', '0'))
+        
+        print(f"Получение ранга для пользователя {user_id}")
+        
+        users = get_users()
+        
+        if not users or user_id not in users:
+            return jsonify({
+                "success": True,
+                "rank": -1,  # Не в рейтинге
+                "total_players": len(users)
+            })
+        
+        # Создаем список всех пользователей для сортировки
+        all_players = []
+        for uid, user_data in users.items():
+            all_players.append({
+                "user_id": uid,
+                "level": user_data.get("level", 1),
+                "score": user_data.get("score", 0),
+                "coins": user_data.get("coins", 0)
+            })
+        
+        # Сортируем по уровню и очкам
+        sorted_players = sorted(
+            all_players,
+            key=lambda x: (x.get('level', 1), x.get('score', 0)),
+            reverse=True
+        )
+        
+        # Находим позицию пользователя
+        rank = -1
+        for i, player in enumerate(sorted_players):
+            if player['user_id'] == user_id:
+                rank = i + 1  # +1 потому что рейтинг начинается с 1
+                break
+        
+        return jsonify({
+            "success": True,
+            "rank": rank,
+            "total_players": len(users),
+            "level": users[user_id].get("level", 1),
+            "score": users[user_id].get("score", 0),
+            "coins": users[user_id].get("coins", 0)
+        })
+        
+    except Exception as e:
+        print(f"Ошибка в get_user_rank: {e}")
+        traceback.print_exc()
+        return jsonify({
+            "success": False, 
+            "error": str(e)
+        }), 500
+
 @app.route('/api/telegram', methods=['POST'])
 def telegram_webhook():
     """Вебхук для Telegram бота"""
@@ -310,6 +524,9 @@ def telegram_webhook():
             user_id = update["message"]["from"]["id"]
             username = update["message"]["from"].get("username", "Гость")
             text = update["message"]["text"]
+            
+            # Определяем язык пользователя
+            lang = get_user_language(user_id, update["message"]["from"])
             
             if text == "/start" or text.startswith("/start"):
                 print(f"Обработка /start от {user_id} ({username})")
@@ -334,8 +551,8 @@ def telegram_webhook():
                     # Не подписан - просим подписаться
                     keyboard = {
                         "inline_keyboard": [[
-                            {"text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
-                            {"text": "✅ Проверить", "callback_data": "check_sub"}
+                            {"text": TEXTS[lang]["subscribe_btn"], "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
+                            {"text": TEXTS[lang]["check_btn"], "callback_data": "check_sub"}
                         ]]
                     }
                     
@@ -343,7 +560,7 @@ def telegram_webhook():
                         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                         json={
                             "chat_id": chat_id,
-                            "text": "⚠️ *Для использования бота нужно подписаться на канал @arrows_game*\n\nПосле подписки нажмите кнопку 'Проверить'",
+                            "text": TEXTS[lang]["subscribe"],
                             "parse_mode": "Markdown",
                             "reply_markup": keyboard
                         },
@@ -366,37 +583,19 @@ def telegram_webhook():
                         }
                         save_user(user_id, user_data)
                     
-                    # БОЛЬШОЕ ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ
-                    welcome_text = f"""🎮 *ДОБРО ПОЖАЛОВАТЬ В ARROWS GAME, {username}!*
-
-*Arrows Pro Ultra* — это захватывающая игра на логику, где твоя цель — *очистить поле от всех стрелок*!
-
-🎯 *СУТЬ ИГРЫ:*
-• На игровом поле расположены стрелки
-• Каждая стрелка указывает направление (вверх, вниз, влево, вправо)
-• Нажимай на стрелки, чтобы они "вылетали" с поля
-• Стрелки, которые сталкиваются с другими, возвращаются назад
-• *Цель: очистить всё поле, кликая по стрелкам в правильном порядке!*
-
-✨ *ОСОБЕННОСТИ:*
-• 🧠 Развивает логическое мышление
-• 🎯 100+ уровней сложности
-• 🏆 Система достижений и лидерборд
-• 💰 Внутриигровая валюта
-• 🎨 Скины для стрелок
-
-*Выберите действие ниже:*"""
+                    # Приветственное сообщение на выбранном языке
+                    welcome_text = TEXTS[lang]["welcome"].format(username=username)
                     
                     keyboard = {
                         "inline_keyboard": [
-                            [{"text": "🎮 НАЧАТЬ ИГРУ", "web_app": {"url": GAME_URL}}],
+                            [{"text": TEXTS[lang]["play_btn"], "web_app": {"url": GAME_URL}}],
                             [
-                                {"text": "📊 Моя статистика", "callback_data": "stats"},
-                                {"text": "🏆 Топ игроков", "callback_data": "top"}
+                                {"text": TEXTS[lang]["stats_btn"], "callback_data": "stats"},
+                                {"text": TEXTS[lang]["top_btn"], "callback_data": "top"}
                             ],
                             [
-                                {"text": "🛠 Поддержка", "url": "https://t.me/arrow_game_supprot_bot"},
-                                {"text": "📢 Наш канал", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"}
+                                {"text": TEXTS[lang]["support_btn"], "url": "https://t.me/arrow_game_supprot_bot"},
+                                {"text": TEXTS[lang]["channel_btn"], "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"}
                             ]
                         ]
                     }
@@ -421,6 +620,9 @@ def telegram_webhook():
             data = callback["data"]
             
             print(f"Callback: {data} от {user_id}")
+            
+            # Определяем язык пользователя
+            lang = get_user_language(user_id, callback["from"])
             
             # Отвечаем на callback (убираем "часики")
             try:
@@ -454,7 +656,7 @@ def telegram_webhook():
                         json={
                             "chat_id": chat_id,
                             "message_id": message_id,
-                            "text": "✅ *Подписка подтверждена!*\n\nИспользуйте /start для доступа к меню.",
+                            "text": TEXTS[lang]["sub_confirmed"],
                             "parse_mode": "Markdown"
                         },
                         timeout=5
@@ -462,8 +664,8 @@ def telegram_webhook():
                 else:
                     keyboard = {
                         "inline_keyboard": [[
-                            {"text": "📢 Подписаться", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
-                            {"text": "✅ Проверить", "callback_data": "check_sub"}
+                            {"text": TEXTS[lang]["subscribe_btn"], "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
+                            {"text": TEXTS[lang]["check_btn"], "callback_data": "check_sub"}
                         ]]
                     }
                     
@@ -472,7 +674,7 @@ def telegram_webhook():
                         json={
                             "chat_id": chat_id,
                             "message_id": message_id,
-                            "text": "❌ *Вы еще не подписались!*\n\nНажмите кнопку ниже, чтобы подписаться на @arrows_game",
+                            "text": TEXTS[lang]["not_subscribed"],
                             "parse_mode": "Markdown",
                             "reply_markup": keyboard
                         },
@@ -484,21 +686,19 @@ def telegram_webhook():
                 user_key = str(user_id)
                 user = users.get(user_key, {})
                 
-                stats_text = f"""📊 *ВАША СТАТИСТИКА В ARROWS GAME:*
-
-🎮 *Игрок:* {user.get('username', 'Гость')}
-🏆 *Текущий уровень:* {user.get('level', 1)}
-⭐ *Пройдено уровней:* {user.get('score', 0)}
-💰 *Монеты:* {user.get('coins', 0)}
-🎯 *Игр сыграно:* {user.get('games_played', 0)}
-🕒 *Последняя активность:* {user.get('last_active', 'никогда')}
-
-*Совет:* Чтобы пройти уровень, нужно очистить поле от всех стрелок, нажимая на них в правильном порядке!"""
+                stats_text = TEXTS[lang]["stats"].format(
+                    username=user.get('username', 'Гость'),
+                    level=user.get('level', 1),
+                    score=user.get('score', 0),
+                    coins=user.get('coins', 0),
+                    games_played=user.get('games_played', 0),
+                    last_active=user.get('last_active', 'никогда')
+                )
                 
                 keyboard = {
                     "inline_keyboard": [[
-                        {"text": "🎮 Продолжить игру", "web_app": {"url": GAME_URL}},
-                        {"text": "🔙 Назад", "callback_data": "back"}
+                        {"text": TEXTS[lang]["continue_btn"], "web_app": {"url": GAME_URL}},
+                        {"text": TEXTS[lang]["back_btn"], "callback_data": "back"}
                     ]]
                 }
                 
@@ -520,16 +720,16 @@ def telegram_webhook():
                     print(f"Пользователей для лидерборда: {len(users)}")
                     
                     if not users:
-                        top_text = "🏆 *Топ игроков:*\n\nПока никто не играл. Будьте первым!"
+                        top_text = TEXTS[lang]["top_empty"]
                     else:
-                        # СОРТИРУЕМ ПО УРОВНЮ (а не по score)
+                        # СОРТИРУЕМ ПО УРОВНЮ
                         sorted_users = sorted(
                             [(uid, data) for uid, data in users.items()],
-                            key=lambda x: x[1].get('level', 1),
+                            key=lambda x: (x[1].get('level', 1), x[1].get('score', 0)),
                             reverse=True
                         )[:10]
                         
-                        top_text = "🏆 *Топ-10 игроков Arrows Game:*\n\n"
+                        top_text = TEXTS[lang]["top_header"]
                         for i, (player_id, player_data) in enumerate(sorted_users, 1):
                             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                             name = player_data.get('username', f'Игрок_{player_id}')
@@ -540,8 +740,8 @@ def telegram_webhook():
                     
                     keyboard = {
                         "inline_keyboard": [[
-                            {"text": "🎮 Играть", "web_app": {"url": GAME_URL}},
-                            {"text": "🔙 Назад", "callback_data": "back"}
+                            {"text": TEXTS[lang]["play_simple_btn"], "web_app": {"url": GAME_URL}},
+                            {"text": TEXTS[lang]["back_btn"], "callback_data": "back"}
                         ]]
                     }
                     
@@ -569,7 +769,7 @@ def telegram_webhook():
                             "text": "❌ Ошибка загрузки лидерборда. Попробуйте позже.",
                             "parse_mode": "Markdown",
                             "reply_markup": {
-                                "inline_keyboard": [[{"text": "🔙 Назад", "callback_data": "back"}]]
+                                "inline_keyboard": [[{"text": TEXTS[lang]["back_btn"], "callback_data": "back"}]]
                             }
                         },
                         timeout=5
@@ -580,13 +780,13 @@ def telegram_webhook():
                 
                 keyboard = {
                     "inline_keyboard": [
-                        [{"text": "🎮 Играть", "web_app": {"url": GAME_URL}}],
+                        [{"text": TEXTS[lang]["play_simple_btn"], "web_app": {"url": GAME_URL}}],
                         [
-                            {"text": "📊 Статистика", "callback_data": "stats"},
-                            {"text": "🏆 Топ игроков", "callback_data": "top"}
+                            {"text": TEXTS[lang]["stats_btn"], "callback_data": "stats"},
+                            {"text": TEXTS[lang]["top_btn"], "callback_data": "top"}
                         ],
                         [
-                            {"text": "🛠 Поддержка", "url": "https://t.me/arrow_game_supprot_bot"}
+                            {"text": TEXTS[lang]["support_btn"], "url": "https://t.me/arrow_game_supprot_bot"}
                         ]
                     ]
                 }
@@ -596,7 +796,7 @@ def telegram_webhook():
                     json={
                         "chat_id": chat_id,
                         "message_id": message_id,
-                        "text": f"🎮 *Меню Arrows Game*\n\nПривет, {username}! Выберите действие:",
+                        "text": TEXTS[lang]["back_menu"].format(username=username),
                         "parse_mode": "Markdown",
                         "reply_markup": keyboard
                     },
@@ -766,6 +966,7 @@ def home():
             <div class="endpoint">POST /api/get_user - Получить данные пользователя</div>
             <div class="endpoint">POST /api/update_score - Обновить счет</div>
             <div class="endpoint">GET /api/leaderboard - Получить лидерборд</div>
+            <div class="endpoint">POST /api/get_user_rank - Получить глобальный ранг пользователя</div>
             <div class="endpoint">POST /api/telegram - Вебхук Telegram</div>
             <div class="endpoint">GET /api/debug - Отладочная информация</div>
             
