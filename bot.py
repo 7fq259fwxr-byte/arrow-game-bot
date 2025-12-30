@@ -1,18 +1,14 @@
 import os
 import json
+import time
+import requests
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import logging
-import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.constants import ChatMemberStatus
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+app = Flask(__name__)
+CORS(app)
 
 # Конфигурация
 BOT_TOKEN = "8124600551:AAHYE9GXQHmc3bAe1kABfqHBmmOKqQQliWU"
@@ -21,78 +17,22 @@ CHANNEL_ID = "@arrows_game"  # Канал для обязательной под
 GAME_URL = "https://7fq259fwxr-byte.github.io/arrowgame/"
 SUPPORT_BOT = "@arrow_game_supprot_bot"
 
-# Вспомогательные функции для базы данных
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
-    try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading data: {e}")
-        return {}
+    with open(DATA_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 def save_data(data):
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving data: {e}")
-        return False
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
-# Функция проверки подписки на канал
-async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Проверяет, подписан ли пользователь на канал."""
-    try:
-        member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        return member.status in [
-            ChatMemberStatus.MEMBER,
-            ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.CREATOR
-        ]
-    except Exception as e:
-        logger.error(f"Ошибка при проверке подписки для {user_id}: {e}")
-        return False
-
-# Функция получения статистики пользователя
-def get_user_stats(user_id):
-    users = load_data()
-    user_id_str = str(user_id)
-    
-    if user_id_str in users:
-        user_data = users[user_id_str]
-        return {
-            "username": user_data.get("username", "Гость"),
-            "score": user_data.get("score", 0),
-            "games_played": user_data.get("games_played", 0),
-            "coins": user_data.get("coins", 0),
-            "level": user_data.get("level", 1),
-            "last_active": user_data.get("last_active", "Никогда")
-        }
-    return None
-
-# Функция получения лидерборда
-def get_leaderboard(limit=10):
-    users = load_data()
-    sorted_users = sorted(
-        users.values(), 
-        key=lambda x: x.get('score', 0), 
-        reverse=True
-    )[:limit]
-    
-    leaderboard = []
-    for i, user in enumerate(sorted_users, 1):
-        leaderboard.append({
-            "rank": i,
-            "username": user.get("username", "Гость"),
-            "score": user.get("score", 0),
-            "level": user.get("level", 1),
-            "coins": user.get("coins", 0)
-        })
-    return leaderboard
-
-# Функция сохранения/обновления пользователя
 def save_user_data(user_id, username):
     users = load_data()
     user_id_str = str(user_id)
@@ -114,350 +54,194 @@ def save_user_data(user_id, username):
     save_data(users)
     return users[user_id_str]
 
-# Главное меню
+def get_user_stats(user_id):
+    users = load_data()
+    user_id_str = str(user_id)
+    
+    if user_id_str in users:
+        user_data = users[user_id_str]
+        return {
+            "username": user_data.get("username", "Гость"),
+            "score": user_data.get("score", 0),
+            "games_played": user_data.get("games_played", 0),
+            "coins": user_data.get("coins", 0),
+            "level": user_data.get("level", 1),
+            "last_active": user_data.get("last_active", "Никогда")
+        }
+    return None
+
+def get_leaderboard(limit=10):
+    users = load_data()
+    sorted_users = sorted(
+        users.values(), 
+        key=lambda x: x.get('score', 0), 
+        reverse=True
+    )[:limit]
+    
+    leaderboard = []
+    for i, user in enumerate(sorted_users, 1):
+        leaderboard.append({
+            "rank": i,
+            "username": user.get("username", "Гость"),
+            "score": user.get("score", 0),
+            "level": user.get("level", 1),
+            "coins": user.get("coins", 0)
+        })
+    return leaderboard
+
+def check_subscription_sync(user_id):
+    """Синхронная проверка подписки через Telegram API"""
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember"
+        params = {
+            "chat_id": CHANNEL_ID,
+            "user_id": user_id
+        }
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                status = data["result"].get("status", "left")
+                # Статусы, которые считаются подпиской
+                valid_statuses = ["creator", "administrator", "member"]
+                return status in valid_statuses
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка проверки подписки: {e}")
+        return False
+
+def send_message(chat_id, text, reply_markup=None, parse_mode="Markdown"):
+    """Отправка сообщения через Telegram API"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode
+    }
+    
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Ошибка отправки сообщения: {e}")
+        return False
+
+def edit_message_text(chat_id, message_id, text, reply_markup=None, parse_mode="Markdown"):
+    """Редактирование сообщения через Telegram API"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode
+    }
+    
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Ошибка редактирования сообщения: {e}")
+        return False
+
+# ==================== КЛАВИАТУРЫ ====================
+
 def get_main_menu_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("🎮 Играть", web_app=WebAppInfo(url=GAME_URL))],
-        [
-            InlineKeyboardButton("📊 Статистика", callback_data='stats'),
-            InlineKeyboardButton("🏆 Лидерборд", callback_data='leaderboard')
-        ],
-        [
-            InlineKeyboardButton("❓ Об игре", callback_data='about'),
-            InlineKeyboardButton("🛠 Поддержка", callback_data='support')
-        ],
-        [InlineKeyboardButton("💡 Предложить идею", callback_data='suggestion')]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# Клавиатура для проверки подписки
-def get_subscription_keyboard():
-    keyboard = [
-        [
-            InlineKeyboardButton("📢 Подписаться на канал", url=f"https://t.me/{CHANNEL_ID.lstrip('@')}"),
-            InlineKeyboardButton("✅ Я подписался", callback_data='check_subscription')
+    """Клавиатура главного меню"""
+    return {
+        "inline_keyboard": [
+            [{"text": "🎮 Играть", "web_app": {"url": GAME_URL}}],
+            [
+                {"text": "📊 Статистика", "callback_data": "stats"},
+                {"text": "🏆 Лидерборд", "callback_data": "leaderboard"}
+            ],
+            [
+                {"text": "❓ Об игре", "callback_data": "about"},
+                {"text": "🛠 Поддержка", "callback_data": "support"}
+            ],
+            [{"text": "💡 Предложить идею", "callback_data": "suggestion"}]
         ]
-    ]
-    return InlineKeyboardMarkup(keyboard)
+    }
 
-# Кнопка "Назад"
+def get_subscription_keyboard():
+    """Клавиатура для подписки на канал"""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📢 Подписаться на канал", "url": f"https://t.me/{CHANNEL_ID.lstrip('@')}"},
+                {"text": "✅ Я подписался", "callback_data": "check_subscription"}
+            ]
+        ]
+    }
+
 def get_back_button():
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data='back')]]
-    return InlineKeyboardMarkup(keyboard)
+    """Кнопка 'Назад'"""
+    return {
+        "inline_keyboard": [[{"text": "🔙 Назад", "callback_data": "back"}]]
+    }
 
-# Команда /start с проверкой подписки
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    username = user.username or user.first_name or "Гость"
+# ==================== ОБРАБОТЧИКИ КОМАНД ====================
+
+def handle_start_command(chat_id, user_id, username, message_id=None):
+    """Обработчик команды /start"""
     
     # Проверяем подписку
-    is_subscribed = await check_subscription(user_id, context)
-    
-    if not is_subscribed:
-        # Показываем сообщение с требованием подписки
-        await update.message.reply_text(
+    if not check_subscription_sync(user_id):
+        message_text = (
             "⚠️ *ДОСТУП ЗАКРЫТ*\n\n"
             "Для использования бота необходима подписка на наш канал!\n\n"
             "📢 *Arrows Game Channel*: @arrows_game\n\n"
             "1. Нажмите кнопку '📢 Подписаться на канал' ниже\n"
             "2. После вступления нажмите '✅ Я подписался'\n"
-            "3. Если бот не видит подписку, подождите 10 секунд и попробуйте снова",
-            reply_markup=get_subscription_keyboard(),
-            parse_mode='Markdown'
+            "3. Если бот не видит подписку, подождите 10 секунд и попробуйте снова"
         )
-        return
+        
+        if message_id:
+            return edit_message_text(chat_id, message_id, message_text, get_subscription_keyboard())
+        else:
+            return send_message(chat_id, message_text, get_subscription_keyboard())
     
     # Сохраняем пользователя
     save_user_data(user_id, username)
     
-    # Показываем главное меню
-    welcome_text = f"""🎮 *Добро пожаловать в Arrows Pro Ultra, {username}!* 🎮
-
-*Доступ открыт!* ✅ Вы подписаны на канал @arrows_game
-
-*Выберите действие:*"""
-    
-    await update.message.reply_text(
-        welcome_text,
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode='Markdown'
+    # Отправляем главное меню
+    message_text = (
+        f"🎮 *Добро пожаловать в Arrows Pro Ultra, {username}!* 🎮\n\n"
+        "*Доступ открыт!* ✅ Вы подписаны на канал @arrows_game\n\n"
+        "*Выберите действие:*"
     )
-
-# Функция показа главного меню (для callback)
-async def show_main_menu(query):
-    user = query.from_user
-    username = user.username or user.first_name or "Гость"
     
-    welcome_text = f"""🎮 *Главное меню Arrows Pro Ultra* 🎮
+    if message_id:
+        return edit_message_text(chat_id, message_id, message_text, get_main_menu_keyboard())
+    else:
+        return send_message(chat_id, message_text, get_main_menu_keyboard())
 
-*Игрок:* {username}
-*Статус:* ✅ Подписка активна
-
-*Выберите действие:*"""
-    
-    await query.edit_message_text(
-        welcome_text,
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode='Markdown'
-    )
-
-# Обработчик нажатий на кнопки
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    
-    # Проверяем подписку для всех действий, кроме проверки подписки и "назад"
-    if query.data not in ['check_subscription', 'back']:
-        is_subscribed = await check_subscription(user_id, context)
-        if not is_subscribed:
-            await query.edit_message_text(
-                "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
-                "Ваша подписка на канал @arrows_game не активна!\n\n"
-                "Обновите подписку и нажмите кнопку ниже:",
-                reply_markup=get_subscription_keyboard(),
-                parse_mode='Markdown'
-            )
-            return
-    
-    # Обработка действий
-    if query.data == 'stats':
-        stats = get_user_stats(user_id)
-        if stats:
-            stats_text = f"""📊 *ВАША СТАТИСТИКА*
-
-👤 *Игрок:* {stats['username']}
-🏆 *Уровень:* {stats['level']}
-⭐ *Очки:* {stats['score']}
-💰 *Монеты:* {stats['coins']}
-🎮 *Игр сыграно:* {stats['games_played']}
-🕐 *Последняя активность:* {stats['last_active']}"""
-        else:
-            stats_text = "Вы еще не начали играть! Нажмите '🎮 Играть', чтобы начать."
-        
-        await query.edit_message_text(
-            stats_text,
-            parse_mode='Markdown',
-            reply_markup=get_back_button()
-        )
-    
-    elif query.data == 'leaderboard':
-        leaderboard = get_leaderboard()
-        
-        leaderboard_text = "🏆 *ТОП-10 ИГРОКОВ*\n\n"
-        for player in leaderboard:
-            medal = ""
-            if player['rank'] == 1:
-                medal = "🥇"
-            elif player['rank'] == 2:
-                medal = "🥈"
-            elif player['rank'] == 3:
-                medal = "🥉"
-            else:
-                medal = f"{player['rank']}."
-            
-            leaderboard_text += f"{medal} *{player['username']}*\n   Уровень: {player['level']} | Очки: {player['score']} | Монеты: {player['coins']}\n\n"
-        
-        await query.edit_message_text(
-            leaderboard_text,
-            parse_mode='Markdown',
-            reply_markup=get_back_button()
-        )
-    
-    elif query.data == 'about':
-        about_text = f"""🎮 *ARROWS PRO ULTRA*
-
-*ОБ ИГРЕ:*
-Arrows Pro Ultra - увлекательная логическая игра, где нужно расставлять стрелки на поле так, чтобы они не сталкивались.
-
-*ОСНОВНЫЕ МЕХАНИКИ:*
-• 🎯 Расставляйте стрелки на игровом поле
-• 🚫 Избегайте столкновений стрелок
-• 📈 Проходите уровни и повышайте сложность
-• 💰 Зарабатывайте монеты за победы
-• 🏆 Соревнуйтесь с другими игроками
-
-*ОСОБЕННОСТИ:*
-✅ Простой и понятный геймплей
-✅ Постепенно возрастающая сложность
-✅ Система достижений и монет
-✅ Таблица лидеров
-✅ Регулярные обновления
-
-*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game
-
-Для начала игры нажмите '🎮 Играть' в главном меню!"""
-        
-        await query.edit_message_text(
-            about_text,
-            parse_mode='Markdown',
-            reply_markup=get_back_button()
-        )
-    
-    elif query.data == 'support':
-        support_text = f"""🛠 *ПОДДЕРЖКА*
-
-*Если у вас возникли проблемы с игрой или есть вопросы:*
-
-👨‍💻 *Техническая поддержка:* {SUPPORT_BOT}
-
-*Мы поможем с:*
-• 🐛 Техническими проблемами
-• ❓ Вопросами по геймплею
-• 🔧 Неполадками в игре
-• 📱 Проблемами с запуском
-• 📢 Вопросами по подписке на канал
-
-*Время ответа:* обычно в течение 24 часов
-
-*Не стесняйтесь обращаться, мы всегда рады помочь!* 😊"""
-        
-        await query.edit_message_text(
-            support_text,
-            parse_mode='Markdown',
-            reply_markup=get_back_button()
-        )
-    
-    elif query.data == 'suggestion':
-        suggestion_text = f"""💡 *ПРЕДЛОЖИТЬ ИДЕЮ*
-
-*У вас есть идея, как улучшить игру? Мы будем рады её услышать!*
-
-📝 *Отправляйте свои предложения:* {SUPPORT_BOT}
-
-*Что можно предложить:*
-• 🎮 Новые механики геймплея
-• 🎨 Улучшения интерфейса
-• 📊 Дополнительные статистики
-• 🏆 Новые достижения
-• 🔧 Технические улучшения
-
-*Наши критерии:*
-✅ Идея должна быть оригинальной
-✅ Предложение должно быть детальным
-✅ Учитывайте баланс игры
-
-*Лучшие идеи будут реализованы в следующих обновлениях!*"""
-        
-        await query.edit_message_text(
-            suggestion_text,
-            parse_mode='Markdown',
-            reply_markup=get_back_button()
-        )
-    
-    elif query.data == 'check_subscription':
-        # Проверяем подписку
-        is_subscribed = await check_subscription(user_id, context)
-        
-        if is_subscribed:
-            # Сохраняем пользователя
-            user = query.from_user
-            save_user_data(user.id, user.username or user.first_name or "Гость")
-            
-            await show_main_menu(query)
-        else:
-            # Подписка не обнаружена
-            await query.edit_message_text(
-                "❌ *ПОДПИСКА НЕ ОБНАРУЖЕНА!*\n\n"
-                "*Убедитесь, что вы:*\n"
-                "1. Действительно вступили в канал: @arrows_game\n"
-                "2. Нажали кнопку '✅ Я подписался' после вступления\n"
-                "3. Если только что подписались, подождите 10 секунд\n\n"
-                "*Если проблема persists:*\n"
-                "• Проверьте, не вышел ли вы случайно из канала\n"
-                "• Убедитесь, что канал публичный\n"
-                "• Попробуйте начать снова с /start",
-                reply_markup=get_subscription_keyboard(),
-                parse_mode='Markdown'
-            )
-    
-    elif query.data == 'back':
-        await show_main_menu(query)
-
-# Команда /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    # Проверяем подписку
-    is_subscribed = await check_subscription(user_id, context)
-    if not is_subscribed:
-        await update.message.reply_text(
-            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
-            "Для использования бота необходима подписка на канал @arrows_game\n\n"
-            "Подпишитесь и попробуйте снова с /start",
-            parse_mode='Markdown'
-        )
-        return
-    
-    help_text = f"""📚 *ДОСТУПНЫЕ КОМАНДЫ*
-
-/start - Запустить бота и показать главное меню
-/help - Показать это сообщение помощи
-/stats - Показать вашу статистику
-/leaderboard - Показать таблицу лидеров
-
-*ОСНОВНЫЕ ФУНКЦИИ:*
-• 🎮 Играть - Запустить игру в мини-приложении
-• 📊 Статистика - Посмотреть вашу статистику
-• 🏆 Лидерборд - Таблица лучших игроков
-• ❓ Об игре - Информация об игре
-• 🛠 Поддержка - Связь с техподдержкой
-• 💡 Предложить идею - Отправить предложение по улучшению
-
-*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game
-
-*По всем вопросам:* {SUPPORT_BOT}"""
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
-
-# Команда /stats
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    
-    # Проверяем подписку
-    is_subscribed = await check_subscription(user_id, context)
-    if not is_subscribed:
-        await update.message.reply_text(
-            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
-            "Для использования бота необходима подписка на канал @arrows_game\n\n"
-            "Подпишитесь и попробуйте снова с /start",
-            parse_mode='Markdown'
-        )
-        return
-    
+def handle_stats(chat_id, user_id, message_id):
+    """Обработчик статистики"""
     stats = get_user_stats(user_id)
     if stats:
-        stats_text = f"""📊 *ВАША СТАТИСТИКА*
-
-👤 *Игрок:* {stats['username']}
-🏆 *Уровень:* {stats['level']}
-⭐ *Очки:* {stats['score']}
-💰 *Монеты:* {stats['coins']}
-🎮 *Игр сыграно:* {stats['games_played']}
-🕐 *Последняя активность:* {stats['last_active']}"""
+        stats_text = (
+            f"📊 *ВАША СТАТИСТИКА*\n\n"
+            f"👤 *Игрок:* {stats['username']}\n"
+            f"🏆 *Уровень:* {stats['level']}\n"
+            f"⭐ *Очки:* {stats['score']}\n"
+            f"💰 *Монеты:* {stats['coins']}\n"
+            f"🎮 *Игр сыграно:* {stats['games_played']}\n"
+            f"🕐 *Последняя активность:* {stats['last_active']}"
+        )
     else:
         stats_text = "Вы еще не начали играть! Нажмите '🎮 Играть', чтобы начать."
     
-    await update.message.reply_text(stats_text, parse_mode='Markdown')
+    return edit_message_text(chat_id, message_id, stats_text, get_back_button())
 
-# Команда /leaderboard
-async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    # Проверяем подписку
-    is_subscribed = await check_subscription(user_id, context)
-    if not is_subscribed:
-        await update.message.reply_text(
-            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
-            "Для использования бота необходима подписка на канал @arrows_game\n\n"
-            "Подпишитесь и попробуйте снова с /start",
-            parse_mode='Markdown'
-        )
-        return
-    
+def handle_leaderboard(chat_id, message_id):
+    """Обработчик лидерборда"""
     leaderboard = get_leaderboard()
     
     leaderboard_text = "🏆 *ТОП-10 ИГРОКОВ*\n\n"
@@ -474,72 +258,416 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         leaderboard_text += f"{medal} *{player['username']}*\n   Уровень: {player['level']} | Очки: {player['score']} | Монеты: {player['coins']}\n\n"
     
-    await update.message.reply_text(leaderboard_text, parse_mode='Markdown')
+    return edit_message_text(chat_id, message_id, leaderboard_text, get_back_button())
 
-# Обработка текстовых сообщений
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text.lower()
+def handle_about(chat_id, message_id):
+    """Обработчик 'Об игре'"""
+    about_text = (
+        "🎮 *ARROWS PRO ULTRA*\n\n"
+        "*ОБ ИГРЕ:*\n"
+        "Arrows Pro Ultra - увлекательная логическая игра, где нужно расставлять стрелки на поле так, чтобы они не сталкивались.\n\n"
+        "*ОСНОВНЫЕ МЕХАНИКИ:*\n"
+        "• 🎯 Расставляйте стрелки на игровом поле\n"
+        "• 🚫 Избегайте столкновений стрелок\n"
+        "• 📈 Проходите уровни и повышайте сложность\n"
+        "• 💰 Зарабатывайте монеты за победы\n"
+        "• 🏆 Соревнуйтесь с другими игроками\n\n"
+        "*ОСОБЕННОСТИ:*\n"
+        "✅ Простой и понятный геймплей\n"
+        "✅ Постепенно возрастающая сложность\n"
+        "✅ Система достижений и монет\n"
+        "✅ Таблица лидеров\n"
+        "✅ Регулярные обновления\n\n"
+        "*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game\n\n"
+        "Для начала игры нажмите '🎮 Играть' в главном меню!"
+    )
     
-    # Проверяем подписку
-    is_subscribed = await check_subscription(user_id, context)
-    if not is_subscribed:
-        await update.message.reply_text(
-            "❌ *ДОСТУП ЗАКРЫТ*\n\n"
-            "Для использования бота необходима подписка на канал @arrows_game\n\n"
-            "Используйте /start для начала работы",
-            parse_mode='Markdown'
-        )
-        return
-    
-    if text in ['статистика', 'стата', 'stats', 'stat']:
-        await stats_command(update, context)
-    elif text in ['лидерборд', 'лидеры', 'топ', 'leaderboard', 'top']:
-        await leaderboard_command(update, context)
-    elif text in ['помощь', 'хелп', 'help', 'commands']:
-        await help_command(update, context)
-    elif text in ['играть', 'game', 'play', 'старт']:
-        await update.message.reply_text(
-            "🎮 *Запуск игры*\n\n"
-            "Нажмите кнопку ниже, чтобы начать игру:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎮 Играть", web_app=WebAppInfo(url=GAME_URL))]
-            ]),
-            parse_mode='Markdown'
-        )
-    else:
-        await update.message.reply_text(
-            "🤔 *Не понимаю ваше сообщение*\n\n"
-            "Используйте /start для отображения меню или /help для помощи.",
-            parse_mode='Markdown'
-        )
+    return edit_message_text(chat_id, message_id, about_text, get_back_button())
 
-# Основная функция запуска бота
-async def main():
-    # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+def handle_support(chat_id, message_id):
+    """Обработчик поддержки"""
+    support_text = (
+        f"🛠 *ПОДДЕРЖКА*\n\n"
+        f"*Если у вас возникли проблемы с игрой или есть вопросы:*\n\n"
+        f"👨‍💻 *Техническая поддержка:* {SUPPORT_BOT}\n\n"
+        f"*Мы поможем с:*\n"
+        f"• 🐛 Техническими проблемами\n"
+        f"• ❓ Вопросами по геймплею\n"
+        f"• 🔧 Неполадками в игре\n"
+        f"• 📱 Проблемами с запуском\n"
+        f"• 📢 Вопросами по подписке на канал\n\n"
+        f"*Время ответа:* обычно в течение 24 часов\n\n"
+        f"*Не стесняйтесь обращаться, мы всегда рады помочь!* 😊"
+    )
     
-    # Добавляем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("leaderboard", leaderboard_command))
-    
-    # Обработчик кнопок
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Обработчик текстовых сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Запускаем бота
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    return edit_message_text(chat_id, message_id, support_text, get_back_button())
 
-# Точка входа
+def handle_suggestion(chat_id, message_id):
+    """Обработчик предложений"""
+    suggestion_text = (
+        f"💡 *ПРЕДЛОЖИТЬ ИДЕЮ*\n\n"
+        f"*У вас есть идея, как улучшить игру? Мы будем рады её услышать!*\n\n"
+        f"📝 *Отправляйте свои предложения:* {SUPPORT_BOT}\n\n"
+        f"*Что можно предложить:*\n"
+        f"• 🎮 Новые механики геймплея\n"
+        f"• 🎨 Улучшения интерфейса\n"
+        f"• 📊 Дополнительные статистики\n"
+        f"• 🏆 Новые достижения\n"
+        f"• 🔧 Технические улучшения\n\n"
+        f"*Наши критерии:*\n"
+        f"✅ Идея должна быть оригинальной\n"
+        f"✅ Предложение должно быть детальным\n"
+        f"✅ Учитывайте баланс игры\n\n"
+        f"*Лучшие идеи будут реализованы в следующих обновлениях!*"
+    )
+    
+    return edit_message_text(chat_id, message_id, suggestion_text, get_back_button())
+
+def handle_back_button(chat_id, user_id, message_id):
+    """Обработчик кнопки 'Назад'"""
+    user_data = get_user_stats(user_id)
+    username = user_data["username"] if user_data else "Гость"
+    
+    message_text = (
+        f"🎮 *Главное меню Arrows Pro Ultra* 🎮\n\n"
+        f"*Игрок:* {username}\n"
+        f"*Статус:* ✅ Подписка активна\n\n"
+        f"*Выберите действие:*"
+    )
+    
+    return edit_message_text(chat_id, message_id, message_text, get_main_menu_keyboard())
+
+# ==================== ВЕБХУК ====================
+
+@app.route('/api/telegram', methods=['POST'])
+def telegram_webhook():
+    """Основной обработчик вебхука от Telegram"""
+    update = request.get_json()
+    
+    # Логируем входящее обновление (для отладки)
+    logger.info(f"Получено обновление: {update}")
+    
+    # Обработка сообщений
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        user_id = update["message"]["from"]["id"]
+        username = update["message"]["from"].get("username", 
+                    update["message"]["from"].get("first_name", "Гость"))
+        
+        # Проверяем наличие текста
+        if "text" in update["message"]:
+            text = update["message"]["text"]
+            
+            # Обработка команды /start
+            if text.startswith("/start"):
+                return handle_start_command(chat_id, user_id, username)
+            
+            # Обработка других команд
+            elif text.startswith("/help"):
+                help_text = (
+                    f"📚 *ДОСТУПНЫЕ КОМАНДЫ*\n\n"
+                    f"/start - Запустить бота и показать главное меню\n"
+                    f"/help - Показать это сообщение помощи\n"
+                    f"/stats - Показать вашу статистику\n"
+                    f"/leaderboard - Показать таблицу лидеров\n\n"
+                    f"*ОСНОВНЫЕ ФУНКЦИИ:*\n"
+                    f"• 🎮 Играть - Запустить игру в мини-приложении\n"
+                    f"• 📊 Статистика - Посмотреть вашу статистику\n"
+                    f"• 🏆 Лидерборд - Таблица лучших игроков\n"
+                    f"• ❓ Об игре - Информация об игре\n"
+                    f"• 🛠 Поддержка - Связь с техподдержкой\n"
+                    f"• 💡 Предложить идею - Отправить предложение по улучшению\n\n"
+                    f"*ОБЯЗАТЕЛЬНО:* Подписка на канал @arrows_game\n\n"
+                    f"*По всем вопросам:* {SUPPORT_BOT}"
+                )
+                send_message(chat_id, help_text)
+                
+            elif text.startswith("/stats"):
+                # Сначала проверяем подписку
+                if not check_subscription_sync(user_id):
+                    send_message(chat_id, "❌ Для доступа к статистике нужна подписка на канал @arrows_game")
+                    return jsonify({"status": "ok"}), 200
+                
+                # Показываем статистику
+                message_text = "📊 *ВАША СТАТИСТИКА*\n\n"
+                stats = get_user_stats(user_id)
+                if stats:
+                    message_text += (
+                        f"👤 *Игрок:* {stats['username']}\n"
+                        f"🏆 *Уровень:* {stats['level']}\n"
+                        f"⭐ *Очки:* {stats['score']}\n"
+                        f"💰 *Монеты:* {stats['coins']}\n"
+                        f"🎮 *Игр сыграно:* {stats['games_played']}\n"
+                        f"🕐 *Последняя активность:* {stats['last_active']}"
+                    )
+                else:
+                    message_text = "Вы еще не начали играть! Нажмите '🎮 Играть', чтобы начать."
+                
+                send_message(chat_id, message_text)
+                
+            elif text.startswith("/leaderboard"):
+                # Сначала проверяем подписку
+                if not check_subscription_sync(user_id):
+                    send_message(chat_id, "❌ Для доступа к лидерборду нужна подписка на канал @arrows_game")
+                    return jsonify({"status": "ok"}), 200
+                
+                # Показываем лидерборд
+                leaderboard = get_leaderboard()
+                leaderboard_text = "🏆 *ТОП-10 ИГРОКОВ*\n\n"
+                for player in leaderboard:
+                    medal = ""
+                    if player['rank'] == 1:
+                        medal = "🥇"
+                    elif player['rank'] == 2:
+                        medal = "🥈"
+                    elif player['rank'] == 3:
+                        medal = "🥉"
+                    else:
+                        medal = f"{player['rank']}."
+                    
+                    leaderboard_text += f"{medal} *{player['username']}*\n   Уровень: {player['level']} | Очки: {player['score']} | Монеты: {player['coins']}\n\n"
+                
+                send_message(chat_id, leaderboard_text)
+                
+            else:
+                # Прочие текстовые сообщения
+                if not check_subscription_sync(user_id):
+                    send_message(chat_id, "❌ Для использования бота нужна подписка на канал @arrows_game\n\nИспользуйте /start для начала работы")
+                else:
+                    send_message(chat_id, "🤔 Используйте /start для отображения меню или /help для помощи.")
+    
+    # Обработка callback-запросов (нажатия на кнопки)
+    elif "callback_query" in update:
+        callback_query = update["callback_query"]
+        chat_id = callback_query["message"]["chat"]["id"]
+        message_id = callback_query["message"]["message_id"]
+        user_id = callback_query["from"]["id"]
+        callback_data = callback_query["data"]
+        
+        # Отвечаем на callback (убираем часики)
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery",
+            json={"callback_query_id": callback_query["id"]}
+        )
+        
+        # Обработка разных callback_data
+        if callback_data == "check_subscription":
+            # Проверяем подписку
+            if check_subscription_sync(user_id):
+                username = callback_query["from"].get("username", 
+                           callback_query["from"].get("first_name", "Гость"))
+                save_user_data(user_id, username)
+                handle_back_button(chat_id, user_id, message_id)
+            else:
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ПОДПИСКА НЕ ОБНАРУЖЕНА!*\n\n"
+                    "*Убедитесь, что вы:*\n"
+                    "1. Действительно вступили в канал: @arrows_game\n"
+                    "2. Нажали кнопку '✅ Я подписался' после вступления\n"
+                    "3. Если только что подписались, подождите 10 секунд\n\n"
+                    "*Если проблема persists:*\n"
+                    "• Проверьте, не вышел ли вы случайно из канала\n"
+                    "• Убедитесь, что канал публичный\n"
+                    "• Попробуйте начать снова с /start",
+                    get_subscription_keyboard()
+                )
+        
+        elif callback_data == "back":
+            handle_back_button(chat_id, user_id, message_id)
+        
+        elif callback_data == "stats":
+            # Проверяем подписку
+            if not check_subscription_sync(user_id):
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                    "Ваша подписка на канал @arrows_game не активна!\n\n"
+                    "Обновите подписку и нажмите кнопку ниже:",
+                    get_subscription_keyboard()
+                )
+            else:
+                handle_stats(chat_id, user_id, message_id)
+        
+        elif callback_data == "leaderboard":
+            # Проверяем подписку
+            if not check_subscription_sync(user_id):
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                    "Ваша подписка на канал @arrows_game не активна!\n\n"
+                    "Обновите подписку и нажмите кнопку ниже:",
+                    get_subscription_keyboard()
+                )
+            else:
+                handle_leaderboard(chat_id, message_id)
+        
+        elif callback_data == "about":
+            # Проверяем подписку
+            if not check_subscription_sync(user_id):
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                    "Ваша подписка на канал @arrows_game не активна!\n\n"
+                    "Обновите подписку и нажмите кнопку ниже:",
+                    get_subscription_keyboard()
+                )
+            else:
+                handle_about(chat_id, message_id)
+        
+        elif callback_data == "support":
+            # Проверяем подписку
+            if not check_subscription_sync(user_id):
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                    "Ваша подписка на канал @arrows_game не активна!\n\n"
+                    "Обновите подписку и нажмите кнопку ниже:",
+                    get_subscription_keyboard()
+                )
+            else:
+                handle_support(chat_id, message_id)
+        
+        elif callback_data == "suggestion":
+            # Проверяем подписку
+            if not check_subscription_sync(user_id):
+                edit_message_text(
+                    chat_id, message_id,
+                    "❌ *ДОСТУП ОТКЛЮЧЕН*\n\n"
+                    "Ваша подписка на канал @arrows_game не активна!\n\n"
+                    "Обновите подписку и нажмите кнопку ниже:",
+                    get_subscription_keyboard()
+                )
+            else:
+                handle_suggestion(chat_id, message_id)
+    
+    return jsonify({"status": "ok"}), 200
+
+# ==================== СТАРЫЕ API ЭНДПОИНТЫ (для игры) ====================
+
+@app.route('/api/get_user', methods=['POST'])
+def get_user():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data received"}), 400
+
+        user_id = str(data.get('user_id', 'unknown'))
+        username = data.get('username', 'Guest')
+
+        users = load_data()
+
+        if user_id not in users:
+            users[user_id] = {
+                "username": username,
+                "score": 0,
+                "games_played": 0,
+                "coins": 0,
+                "level": 1,
+                "last_active": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "first_seen": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            save_data(users)
+
+        return jsonify({
+            "success": True,
+            "user": users[user_id]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/test', methods=['GET'])
+def test_api():
+    return jsonify({
+        "success": True,
+        "message": "API работает нормально!",
+        "server_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    })
+
+@app.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard_api():
+    users = load_data()
+    sorted_users = sorted(users.values(), key=lambda x: x.get('score', 0), reverse=True)[:10]
+    return jsonify(sorted_users)
+
+# ==================== НАСТРОЙКА ВЕБХУКА ====================
+
+@app.route('/set_webhook', methods=['GET'])
+def set_webhook():
+    """Установка вебхука для Telegram бота"""
+    webhook_url = f"https://malollas.pythonanywhere.com/api/telegram"
+    method = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}"
+    
+    try:
+        r = requests.get(method)
+        result = r.json()
+        
+        if result.get("ok"):
+            return jsonify({
+                "success": True,
+                "message": "Webhook успешно установлен!",
+                "url": webhook_url
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Ошибка установки webhook",
+                "error": result.get("description", "Unknown error")
+            })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": "Ошибка установки webhook",
+            "error": str(e)
+        })
+
+@app.route('/delete_webhook', methods=['GET'])
+def delete_webhook():
+    """Удаление вебхука"""
+    method = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook"
+    
+    try:
+        r = requests.get(method)
+        result = r.json()
+        
+        if result.get("ok"):
+            return jsonify({
+                "success": True,
+                "message": "Webhook успешно удален!"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Ошибка удаления webhook",
+                "error": result.get("description", "Unknown error")
+            })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": "Ошибка удаления webhook",
+            "error": str(e)
+        })
+
+@app.route('/webhook_info', methods=['GET'])
+def webhook_info():
+    """Получение информации о текущем вебхуке"""
+    method = f"https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo"
+    
+    try:
+        r = requests.get(method)
+        result = r.json()
+        
+        return jsonify({
+            "success": result.get("ok", False),
+            "webhook_info": result.get("result", {})
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+# ==================== ЗАПУСК ====================
+
 if __name__ == '__main__':
-    print("🚀 Запуск бота Arrows Pro Ultra...")
-    print(f"📢 Канал для подписки: {CHANNEL_ID}")
-    print(f"🎮 URL игры: {GAME_URL}")
-    print(f"🛠 Бот поддержки: {SUPPORT_BOT}")
-    
-    # Запускаем асинхронную главную функцию
-    asyncio.run(main())
+    app.run(debug=False, host='0.0.0.0', port=5001)
